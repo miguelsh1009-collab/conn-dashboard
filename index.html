@@ -165,15 +165,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
 // ── palette ──
 const COLORS = ['#6366f1','#22d3ee','#f59e0b','#ef4444','#34d399','#a78bfa','#fb923c','#60a5fa','#f472b6'];
 const CONN_TYPES = [
-  {key:'rate_total', label:'总连接量',  color:'#6366f1'},
-  {key:'rate_tel',   label:'电话量',    color:'#22d3ee'},
-  {key:'rate_chat',  label:'微聊对数',  color:'#f59e0b'},
-  {key:'rate_sub',   label:'关注订阅',  color:'#34d399'},
-  {key:'rate_view',  label:'带看对数',  color:'#a78bfa'},
-  {key:'rate_ai',    label:'AI评测',    color:'#fb923c'},
-  {key:'rate_3d',    label:'3D看房',    color:'#60a5fa'},
-  {key:'rate_broad', label:'泛连接',    color:'#f472b6'},
-  {key:'rate_video', label:'视频评测',  color:'#ef4444'},
+  {key:'rate_total',     label:'总连接量',      color:'#6366f1'},
+  {key:'rate_active',    label:'主动连接',       color:'#f59e0b'},
+  {key:'rate_tel_conn',  label:'电话接通量',     color:'#22d3ee'},
+  {key:'rate_chat_eff',  label:'有效微聊对数',   color:'#34d399'},
+  {key:'rate_view_conn', label:'带看接通量',     color:'#a78bfa'},
+  {key:'rate_sub',       label:'关注订阅',       color:'#fb923c'},
+  {key:'rate_ai',        label:'AI评测',         color:'#60a5fa'},
+  {key:'rate_3d',        label:'3D看房',         color:'#f472b6'},
+  {key:'rate_broad',     label:'泛连接',         color:'#94a3b8'},
+  {key:'rate_video',     label:'视频评测',       color:'#ef4444'},
 ];
 
 let rawAJK=[], rawW58=[];
@@ -206,12 +207,14 @@ function groupByWeek(daily){
   daily.forEach(d => {
     const wk = d.week_thu;
     if(!map[wk]) map[wk] = {week:wk, days:[], _uv:0,_vcuv:0,
-      _conn_total:0,_conn_tel:0,_conn_chat:0,_conn_sub:0,_conn_view:0,_conn_ai:0,_conn_3d:0,_conn_broad:0,_conn_video:0};
+      _active_conn:0,_tel_conn:0,_chat_eff:0,_view_conn:0,
+      _conn_total:0,_conn_sub:0,_conn_ai:0,_conn_3d:0,_conn_broad:0,_conn_video:0};
     const w = map[wk];
     w.days.push(d.date);
     if(d.uv)   w._uv   += d.uv;
     if(d.vcuv) w._vcuv += d.vcuv;
-    ['conn_total','conn_tel','conn_chat','conn_sub','conn_view','conn_ai','conn_3d','conn_broad','conn_video'].forEach(k=>{
+    ['active_conn','tel_conn','chat_eff','view_conn',
+     'conn_total','conn_sub','conn_ai','conn_3d','conn_broad','conn_video'].forEach(k=>{
       if(d[k]) w['_'+k] += d[k];
     });
   });
@@ -223,11 +226,11 @@ function groupByWeek(daily){
     return { ...w,
       uv, vcuv,
       vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
-      conn_total:avg('conn_total'), conn_tel:avg('conn_tel'), conn_chat:avg('conn_chat'),
-      conn_sub:avg('conn_sub'), conn_view:avg('conn_view'), conn_ai:avg('conn_ai'),
+      active_conn:avg('active_conn'), tel_conn:avg('tel_conn'), chat_eff:avg('chat_eff'), view_conn:avg('view_conn'),
+      conn_total:avg('conn_total'), conn_sub:avg('conn_sub'), conn_ai:avg('conn_ai'),
       conn_3d:avg('conn_3d'), conn_broad:avg('conn_broad'), conn_video:avg('conn_video'),
-      rate_total:rate('conn_total'), rate_tel:rate('conn_tel'), rate_chat:rate('conn_chat'),
-      rate_sub:rate('conn_sub'), rate_view:rate('conn_view'), rate_ai:rate('conn_ai'),
+      rate_active:rate('active_conn'), rate_tel_conn:rate('tel_conn'), rate_chat_eff:rate('chat_eff'), rate_view_conn:rate('view_conn'),
+      rate_total:rate('conn_total'), rate_sub:rate('conn_sub'), rate_ai:rate('conn_ai'),
       rate_3d:rate('conn_3d'), rate_broad:rate('conn_broad'), rate_video:rate('conn_video'),
     };
   });
@@ -312,7 +315,7 @@ function renderAjkKpi(){
     {label:'日均UV',val:fmtW(cur.uv), sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
     {label:'日均VCUV',val:fmtW(cur.vcuv), sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
     {label:'总连接/vcuv',val:fmtPct(cur.rate_total), sub:connChg!=null?`环比 <span class="${+connChg>=0?'up':'dn'}">${+connChg>=0?'+':''}${connChg}pp</span>`:'--'},
-    {label:'微聊对数/vcuv',val:fmtPct(cur.rate_chat), sub:`电话 ${fmtPct(cur.rate_tel)} · 视频 ${fmtPct(cur.rate_video)}`},
+    {label:'主动连接/vcuv',val:fmtPct(cur.rate_active), sub:`电话 ${fmtPct(cur.rate_tel_conn)} · 微聊 ${fmtPct(cur.rate_chat_eff)} · 带看 ${fmtPct(cur.rate_view_conn)}`},
   ];
   document.getElementById('ajkKpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
 }
@@ -327,20 +330,24 @@ function renderAjkCmp(){
     {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV/UV',sub:'率',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
-    {sep:true,label:'── 连接转化（/vcuv）'},
+    {sep:true,label:'── 主动连接转化（/vcuv，接通口径）'},
+    {label:'主动连接/vcuv',sub:'电话接通+微聊+带看接通',key:'rate_active',fmt:v=>fmtPct(v),isRate:true},
+    {label:'电话接通量/vcuv',sub:'售楼处+顾问+经纪人',key:'rate_tel_conn',fmt:v=>fmtPct(v),isRate:true},
+    {label:'有效微聊对数/vcuv',key:'rate_chat_eff',fmt:v=>fmtPct(v),isRate:true},
+    {label:'带看接通量/vcuv',key:'rate_view_conn',fmt:v=>fmtPct(v),isRate:true},
+    {sep:true,label:'── 其他连接转化（/vcuv）'},
     {label:'总连接量/vcuv',key:'rate_total',fmt:v=>fmtPct(v),isRate:true},
-    {label:'电话量/vcuv',key:'rate_tel',fmt:v=>fmtPct(v),isRate:true},
-    {label:'微聊对数/vcuv',key:'rate_chat',fmt:v=>fmtPct(v),isRate:true},
     {label:'关注订阅/vcuv',key:'rate_sub',fmt:v=>fmtPct(v),isRate:true},
-    {label:'带看对数/vcuv',key:'rate_view',fmt:v=>fmtPct(v),isRate:true},
     {label:'AI评测/vcuv',key:'rate_ai',fmt:v=>fmtPct(v),isRate:true},
     {label:'3D看房/vcuv',key:'rate_3d',fmt:v=>fmtPct(v),isRate:true},
     {label:'泛连接/vcuv',key:'rate_broad',fmt:v=>fmtPct(v),isRate:true},
     {label:'视频评测/vcuv',key:'rate_video',fmt:v=>fmtPct(v),isRate:true},
-    {sep:true,label:'── 绝对量（周累计）'},
+    {sep:true,label:'── 绝对量（日均）'},
+    {label:'主动连接',sub:'日均',key:'active_conn',fmt:v=>fmt(v,0),isRate:false},
+    {label:'电话接通量',sub:'日均',key:'tel_conn',fmt:v=>fmt(v,0),isRate:false},
+    {label:'有效微聊对数',sub:'日均',key:'chat_eff',fmt:v=>fmt(v,0),isRate:false},
+    {label:'带看接通量',sub:'日均',key:'view_conn',fmt:v=>fmt(v,0),isRate:false},
     {label:'总连接量',sub:'日均',key:'conn_total',fmt:v=>fmt(v,0),isRate:false},
-    {label:'微聊对数',sub:'日均',key:'conn_chat',fmt:v=>fmt(v,0),isRate:false},
-    {label:'电话量',sub:'日均',key:'conn_tel',fmt:v=>fmt(v,0),isRate:false},
     {label:'视频评测',sub:'日均',key:'conn_video',fmt:v=>fmt(v,0),isRate:false},
   ];
 
