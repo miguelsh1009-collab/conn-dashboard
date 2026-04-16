@@ -312,10 +312,10 @@ function renderAjkKpi(){
   const uvChg = prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
   const connChg = prev?(cur.rate_total-prev.rate_total).toFixed(2):null;
   const kpis=[
-    {label:'日均UV',val:fmtW(cur.uv), sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
-    {label:'日均VCUV',val:fmtW(cur.vcuv), sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
-    {label:'总连接/vcuv',val:fmtPct(cur.rate_total), sub:connChg!=null?`环比 <span class="${+connChg>=0?'up':'dn'}">${+connChg>=0?'+':''}${connChg}pp</span>`:'--'},
-    {label:'主动连接/vcuv',val:fmtPct(cur.rate_active), sub:`电话 ${fmtPct(cur.rate_tel_conn)} · 微聊 ${fmtPct(cur.rate_chat_eff)} · 带看 ${fmtPct(cur.rate_view_conn)}`},
+    {label:'日均UV',val:fmtW(cur.uv), sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
+    {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate), sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
+    {label:'总连接/vcuv',val:fmtPct(cur.rate_total), sub:prev?`环比 <span class="${(cur.rate_total-prev.rate_total)>=0?'up':'dn'}">${(cur.rate_total-prev.rate_total)>=0?'+':''}${(cur.rate_total-prev.rate_total).toFixed(2)}pp</span>`:'--'},
+    {label:'主动连接/vcuv',val:fmtPct(cur.rate_active), sub:prev?`环比 <span class="${(cur.rate_active-prev.rate_active)>=0?'up':'dn'}">${(cur.rate_active-prev.rate_active)>=0?'+':''}${(cur.rate_active-prev.rate_active).toFixed(2)}pp</span>`:'--'},
   ];
   document.getElementById('ajkKpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
 }
@@ -443,8 +443,8 @@ function renderW58Kpi(){
   const uvChg=prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
   const connChg=prev?(cur.conn_rate-prev.conn_rate).toFixed(2):null;
   const kpis=[
-    {label:'日均UV',val:fmtW(cur.uv),sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
-    {label:'日均VCUV',val:fmtW(cur.vcuv),sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
+    {label:'日均UV',val:fmtW(cur.uv),sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
+    {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate),sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
     {label:'日均有效连接用户数',val:fmt(cur.conn,0),sub:`连接/VCUV ${fmtPct(cur.conn_rate)}`},
     {label:'APP占UV比',val:cur.uv?fmtPct(cur.uv_app/cur.uv*100):'--',sub:`小程序 ${cur.uv?fmtPct(cur.uv_mini/cur.uv*100):'--'}`},
   ];
