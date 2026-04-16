@@ -658,8 +658,7 @@ function formatDate(v) {
   if (!v) return '';
   if (typeof v === 'string') return v.slice(0, 10);
   if (v instanceof Date) {
-    // use UTC to avoid timezone shift (SheetJS stores dates as UTC midnight)
-    return v.getUTCFullYear() + '-' + String(v.getUTCMonth()+1).padStart(2,'0') + '-' + String(v.getUTCDate()).padStart(2,'0');
+    return v.getFullYear() + '-' + String(v.getMonth()+1).padStart(2,'0') + '-' + String(v.getDate()).padStart(2,'0');
   }
   // Excel serial number (days since 1900-01-01, with leap year bug)
   if (typeof v === 'number') {
@@ -684,7 +683,7 @@ async function handleUpload(event) {
   showToast('正在解析…', false);
   try {
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const wb = XLSX.read(buf, {type:'array'}); // raw serial numbers for dates — timezone-safe
 
     // ── AJK sheet ──
     const ajkWs = wb.Sheets['ajk'];
