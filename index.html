@@ -216,14 +216,16 @@ function groupByWeek(daily){
     });
   });
   return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w => {
-    const v = w._vcuv;
-    const rate = (k) => v ? +(w['_'+k]/v*100).toFixed(4) : null;
+    const n = w.days.length;
+    const avg = k => Math.round(w['_'+k]/n);
+    const uv = avg('uv'), vcuv = avg('vcuv');
+    const rate = k => vcuv ? +(avg(k)/vcuv*100).toFixed(4) : null;
     return { ...w,
-      uv:w._uv, vcuv:w._vcuv,
-      vcuv_rate: w._uv ? +(w._vcuv/w._uv*100).toFixed(4) : null,
-      conn_total:w._conn_total, conn_tel:w._conn_tel, conn_chat:w._conn_chat,
-      conn_sub:w._conn_sub, conn_view:w._conn_view, conn_ai:w._conn_ai,
-      conn_3d:w._conn_3d, conn_broad:w._conn_broad, conn_video:w._conn_video,
+      uv, vcuv,
+      vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
+      conn_total:avg('conn_total'), conn_tel:avg('conn_tel'), conn_chat:avg('conn_chat'),
+      conn_sub:avg('conn_sub'), conn_view:avg('conn_view'), conn_ai:avg('conn_ai'),
+      conn_3d:avg('conn_3d'), conn_broad:avg('conn_broad'), conn_video:avg('conn_video'),
       rate_total:rate('conn_total'), rate_tel:rate('conn_tel'), rate_chat:rate('conn_chat'),
       rate_sub:rate('conn_sub'), rate_view:rate('conn_view'), rate_ai:rate('conn_ai'),
       rate_3d:rate('conn_3d'), rate_broad:rate('conn_broad'), rate_video:rate('conn_video'),
@@ -248,13 +250,17 @@ function groupByWeek58(daily){
     w._vcuv   += d.vcuv_total||0;
     w._conn   += d.conn_total||0;
   });
-  return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w=>({
-    ...w,
-    uv:w._uv, uv_pc:w._uv_pc, uv_m:w._uv_m, uv_app:w._uv_app, uv_mini:w._uv_mini,
-    vcuv:w._vcuv, conn:w._conn,
-    vcuv_rate: w._uv ? +(w._vcuv/w._uv*100).toFixed(4) : null,
-    conn_rate: w._vcuv ? +(w._conn/w._vcuv*100).toFixed(4) : null,
-  }));
+  return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w=>{
+    const n = w.days.length;
+    const avg = k => Math.round(w['_'+k]/n);
+    const uv=avg('uv'), vcuv=avg('vcuv'), conn=avg('conn');
+    return { ...w,
+      uv, uv_pc:avg('uv_pc'), uv_m:avg('uv_m'), uv_app:avg('uv_app'), uv_mini:avg('uv_mini'),
+      vcuv, conn,
+      vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
+      conn_rate: vcuv ? +(conn/vcuv*100).toFixed(4) : null,
+    };
+  });
 }
 
 function wLabel(thuStr, days){
@@ -303,8 +309,8 @@ function renderAjkKpi(){
   const uvChg = prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
   const connChg = prev?(cur.rate_total-prev.rate_total).toFixed(2):null;
   const kpis=[
-    {label:'周UV',val:fmtW(cur.uv), sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
-    {label:'周VCUV',val:fmtW(cur.vcuv), sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
+    {label:'日均UV',val:fmtW(cur.uv), sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
+    {label:'日均VCUV',val:fmtW(cur.vcuv), sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
     {label:'总连接/vcuv',val:fmtPct(cur.rate_total), sub:connChg!=null?`环比 <span class="${+connChg>=0?'up':'dn'}">${+connChg>=0?'+':''}${connChg}pp</span>`:'--'},
     {label:'微聊对数/vcuv',val:fmtPct(cur.rate_chat), sub:`电话 ${fmtPct(cur.rate_tel)} · 视频 ${fmtPct(cur.rate_video)}`},
   ];
@@ -318,8 +324,8 @@ function renderAjkCmp(){
   if(prev) document.getElementById('thPrev').textContent = wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
 
   const rows=[
-    {label:'UV',sub:'周累计',key:'uv',fmt:v=>fmtW(v),isRate:false},
-    {label:'VCUV',sub:'周累计',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
+    {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v),isRate:false},
+    {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV/UV',sub:'率',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── 连接转化（/vcuv）'},
     {label:'总连接量/vcuv',key:'rate_total',fmt:v=>fmtPct(v),isRate:true},
@@ -332,10 +338,10 @@ function renderAjkCmp(){
     {label:'泛连接/vcuv',key:'rate_broad',fmt:v=>fmtPct(v),isRate:true},
     {label:'视频评测/vcuv',key:'rate_video',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── 绝对量（周累计）'},
-    {label:'总连接量',key:'conn_total',fmt:v=>fmt(v,0),isRate:false},
-    {label:'微聊对数',key:'conn_chat',fmt:v=>fmt(v,0),isRate:false},
-    {label:'电话量',key:'conn_tel',fmt:v=>fmt(v,0),isRate:false},
-    {label:'视频评测',key:'conn_video',fmt:v=>fmt(v,0),isRate:false},
+    {label:'总连接量',sub:'日均',key:'conn_total',fmt:v=>fmt(v,0),isRate:false},
+    {label:'微聊对数',sub:'日均',key:'conn_chat',fmt:v=>fmt(v,0),isRate:false},
+    {label:'电话量',sub:'日均',key:'conn_tel',fmt:v=>fmt(v,0),isRate:false},
+    {label:'视频评测',sub:'日均',key:'conn_video',fmt:v=>fmt(v,0),isRate:false},
   ];
 
   document.getElementById('ajkCmpBody').innerHTML = rows.map(r=>{
@@ -430,9 +436,9 @@ function renderW58Kpi(){
   const uvChg=prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
   const connChg=prev?(cur.conn_rate-prev.conn_rate).toFixed(2):null;
   const kpis=[
-    {label:'周UV',val:fmtW(cur.uv),sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
-    {label:'周VCUV',val:fmtW(cur.vcuv),sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
-    {label:'有效连接用户数',val:fmt(cur.conn,0),sub:`连接/VCUV ${fmtPct(cur.conn_rate)}`},
+    {label:'日均UV',val:fmtW(cur.uv),sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
+    {label:'日均VCUV',val:fmtW(cur.vcuv),sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
+    {label:'日均有效连接用户数',val:fmt(cur.conn,0),sub:`连接/VCUV ${fmtPct(cur.conn_rate)}`},
     {label:'APP占UV比',val:cur.uv?fmtPct(cur.uv_app/cur.uv*100):'--',sub:`小程序 ${cur.uv?fmtPct(cur.uv_mini/cur.uv*100):'--'}`},
   ];
   document.getElementById('w58Kpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
@@ -444,16 +450,16 @@ function renderW58Cmp(){
   if(prev) document.getElementById('th58Prev').textContent=wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
 
   const rows=[
-    {label:'UV',key:'uv',fmt:v=>fmtW(v)},
-    {label:'VCUV',key:'vcuv',fmt:v=>fmtW(v)},
+    {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v)},
+    {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v)},
     {label:'VCUV/UV',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
-    {label:'有效连接用户数',key:'conn',fmt:v=>fmt(v,0)},
+    {label:'有效连接用户数',sub:'日均',key:'conn',fmt:v=>fmt(v,0)},
     {label:'连接/VCUV',key:'conn_rate',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── UV渠道构成'},
-    {label:'APP-UV',key:'uv_app',fmt:v=>fmtW(v)},
-    {label:'PC-UV',key:'uv_pc',fmt:v=>fmtW(v)},
-    {label:'M-UV',key:'uv_m',fmt:v=>fmtW(v)},
-    {label:'小程序-UV',key:'uv_mini',fmt:v=>fmtW(v)},
+    {label:'APP-UV',sub:'日均',key:'uv_app',fmt:v=>fmtW(v)},
+    {label:'PC-UV',sub:'日均',key:'uv_pc',fmt:v=>fmtW(v)},
+    {label:'M-UV',sub:'日均',key:'uv_m',fmt:v=>fmtW(v)},
+    {label:'小程序-UV',sub:'日均',key:'uv_mini',fmt:v=>fmtW(v)},
   ];
   document.getElementById('w58CmpBody').innerHTML = rows.map(r=>{
     if(r.sep) return `<tr><td colspan="5" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
