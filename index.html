@@ -117,6 +117,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
     <div class="section-hd"><span class="section-title">UV & VCUV/UV 趋势（周）</span></div>
     <div class="chart-area" id="ajkUvChart"></div>
   </div>
+
+  <!-- 总连接量趋势 -->
+  <div class="section">
+    <div class="section-hd"><span class="section-title">总连接量 & 总连接量/vcuv 趋势（周）</span></div>
+    <div class="chart-area" id="ajkConnVolChart"></div>
+  </div>
 </div>
 
 <!-- ══ 58 ══ -->
@@ -187,7 +193,7 @@ let rawAJK=[], rawW58=[];
 let ajkWeeks=[], w58Weeks=[];
 let selAjkWeek=0, selW58Week=0;
 let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
-let chartAjkTrend=null, chartAjkUv=null, chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
+let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null, chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
 
 // ── helpers ──
 function chartOpts(){ return { backgroundColor:'transparent', tooltip:{trigger:'axis',backgroundColor:'#1a1d2e',borderColor:'#2a2d3e',textStyle:{color:'#e2e8f0',fontSize:12}}, legend:{textStyle:{color:'#94a3b8'},top:0,type:'scroll'}, grid:{left:55,right:20,top:36,bottom:50} }; }
@@ -302,6 +308,7 @@ function renderAjk(){
   buildAjkTypePills();
   renderAjkTrend();
   renderAjkUv();
+  renderAjkConnVol();
 }
 
 function buildAjkWeekNav(){
@@ -404,6 +411,26 @@ function renderAjkTrend(){
     }))
   };
   chartAjkTrend.setOption(opts, true);
+}
+
+function renderAjkConnVol(){
+  if(!chartAjkConn) chartAjkConn = echarts.init(document.getElementById('ajkConnVolChart'));
+  const weeks = ajkWeeks.slice(-26);
+  const labels = weeks.map(w=>wLabel(w.week,w.days));
+  chartAjkConn.setOption({
+    ...chartOpts(),
+    legend:{data:['总连接量（日均）','总连接量/vcuv(%)'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:60,right:55,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:[
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v>9999?(v/10000).toFixed(1)+'万':v},splitLine:{lineStyle:{color:'#2a2d3e'}}},
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
+    ],
+    series:[
+      {name:'总连接量（日均）',type:'bar',data:weeks.map(w=>w.conn_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'总连接量/vcuv(%)',type:'line',smooth:true,data:weeks.map(w=>w.rate_total!=null?+w.rate_total.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
+    ]
+  },true);
 }
 
 function renderAjkUv(){
