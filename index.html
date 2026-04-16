@@ -86,7 +86,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
   <!-- 周对比 -->
   <div class="section">
     <div class="section-hd">
-      <span class="section-title">周对比（周三～周四）</span>
+      <span class="section-title">周对比</span>
       <div class="week-nav" id="ajkWeekNav"></div>
     </div>
     <div style="overflow-x:auto">
@@ -131,7 +131,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
 
   <div class="section">
     <div class="section-hd">
-      <span class="section-title">周对比（周三～周四）</span>
+      <span class="section-title">周对比</span>
       <div class="week-nav" id="w58WeekNav"></div>
     </div>
     <div style="overflow-x:auto">
@@ -363,7 +363,6 @@ function renderAjkCmp(){
     {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV/UV',sub:'率',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
-    {label:'深度 vcpv/vcuv',key:'vcpv_vcuv',fmt:v=>v==null?'--':v.toFixed(2),isRate:true},
     {sep:true,label:'── 主动连接转化（/vcuv，接通口径）'},
     {label:'主动连接/vcuv',sub:'电话接通+微聊+带看接通',key:'rate_active',fmt:v=>fmtPct(v),isRate:true},
     {label:'电话接通量/vcuv',sub:'售楼处+顾问+经纪人',key:'rate_tel_conn',fmt:v=>fmtPct(v),isRate:true},
