@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>平台连接数据看板</title>
 <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg:#0f1117; --card:#1a1d2e; --border:#2a2d3e; --text:#e2e8f0;
@@ -19,6 +20,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
 .tab{padding:5px 20px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:13px;border:none;background:none}
 .tab.active{background:var(--primary);color:#fff}
 .updated{color:var(--muted);font-size:12px;margin-left:auto}
+.upload-btn{padding:5px 14px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;white-space:nowrap}
+.upload-btn:hover{opacity:.85}
+#fileInput{display:none}
+.upload-toast{position:fixed;bottom:24px;right:24px;background:#1a1d2e;border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--text);z-index:999;display:none;max-width:320px}
 .container{max-width:1400px;margin:0 auto;padding:16px 20px}
 .page{display:none}.page.active{display:block}
 
@@ -75,7 +80,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
     <button class="tab" onclick="switchTab('w58')">58同城</button>
   </div>
   <span class="updated" id="updatedText">加载中…</span>
+  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传 xlsx</button>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleUpload(event)">
 </div>
+<div class="upload-toast" id="uploadToast"></div>
 
 <div class="container">
 
@@ -174,6 +182,43 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
 </div><!-- /container -->
 
 <script>
+// ── tooltip with 环比 ──
+// seriesCfg: [{key, isRate}] — isRate=true → show pp diff; false → show % relative change
+function makeTip(weeksRef, seriesCfg, fmtFn) {
+  return {
+    trigger:'axis', backgroundColor:'#1a1d2e', borderColor:'#2a2d3e',
+    textStyle:{color:'#e2e8f0',fontSize:12},
+    formatter: params => {
+      const i = params[0].dataIndex;
+      const weeks = weeksRef();
+      let html = `<b>${params[0].axisValue}</b><br>`;
+      params.forEach((p, pi) => {
+        const cur = p.value;
+        const cfg = seriesCfg[pi] || {};
+        const key = cfg.key;
+        const isRate = cfg.isRate || false;
+        const prev = (i > 0 && key && weeks[i-1]) ? weeks[i-1][key] : null;
+        let chgTxt = '';
+        if (cur != null && prev != null) {
+          if (isRate) {
+            const diff = cur - prev;
+            const sign = diff >= 0 ? '+' : '';
+            const col = diff >= 0 ? '#ef4444' : '#22c55e';
+            chgTxt = ` <span style="color:${col}">${sign}${diff.toFixed(2)}pp</span>`;
+          } else if (prev !== 0) {
+            const pct = (cur - prev) / Math.abs(prev) * 100;
+            const sign = pct >= 0 ? '+' : '';
+            const col = pct >= 0 ? '#ef4444' : '#22c55e';
+            chgTxt = ` <span style="color:${col}">${sign}${pct.toFixed(1)}%</span>`;
+          }
+        }
+        html += `${p.marker}${p.seriesName}：${cur != null ? fmtFn(cur, pi) : '--'}${chgTxt}<br>`;
+      });
+      return html;
+    }
+  };
+}
+
 // ── palette ──
 const COLORS = ['#6366f1','#22d3ee','#f59e0b','#ef4444','#34d399','#a78bfa','#fb923c','#60a5fa','#f472b6'];
 const CONN_TYPES = [
@@ -425,8 +470,11 @@ function renderAjkTrend(){
   if(!chartAjkTrend) chartAjkTrend = echarts.init(document.getElementById('ajkTrendChart'));
   const weeks = ajkWeeks.slice(-26); // last 26 weeks
   const labels = weeks.map(w=>wLabel(w.week,w.days));
-  const opts = {...chartOpts(), xAxis:xAxis(labels), yAxis:yAxis(v=>v+'%'),
-    series: CONN_TYPES.filter(t=>activeTypes.has(t.key)).map(t=>({
+  const visTypes = CONN_TYPES.filter(t=>activeTypes.has(t.key));
+  const opts = {...chartOpts(),
+    tooltip: makeTip(()=>weeks, visTypes.map(t=>({key:t.key,isRate:true})), (v)=>v.toFixed(3)+'%'),
+    xAxis:xAxis(labels), yAxis:yAxis(v=>v+'%'),
+    series: visTypes.map(t=>({
       name:t.label, type:'line', smooth:true,
       data: weeks.map(w=>w[t.key]!=null?+w[t.key].toFixed(3):null),
       itemStyle:{color:t.color}, lineStyle:{color:t.color,width:2},
@@ -434,6 +482,7 @@ function renderAjkTrend(){
     }))
   };
   chartAjkTrend.setOption(opts, true);
+
 }
 
 function renderAjkConnVol(){
@@ -442,6 +491,7 @@ function renderAjkConnVol(){
   const labels = weeks.map(w=>wLabel(w.week,w.days));
   chartAjkConn.setOption({
     ...chartOpts(),
+    tooltip: makeTip(()=>ajkWeeks.slice(-26), [{key:'conn_computed',isRate:false},{key:'rate_computed',isRate:true}], (v,pi)=>pi===0?(v>9999?(v/10000).toFixed(1)+'万':v.toFixed(0)):v.toFixed(3)+'%'),
     legend:{data:['总连接量（日均）','总连接量/vcuv(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:60,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -450,8 +500,8 @@ function renderAjkConnVol(){
       {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
     ],
     series:[
-      {name:'总连接量（日均）',type:'bar',data:weeks.map(w=>w.conn_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'总连接量/vcuv(%)',type:'line',smooth:true,data:weeks.map(w=>w.rate_total!=null?+w.rate_total.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'总连接量（日均）',type:'bar',data:weeks.map(w=>w.conn_computed),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'总连接量/vcuv(%)',type:'line',smooth:true,data:weeks.map(w=>w.rate_computed!=null?+w.rate_computed.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 }
@@ -462,7 +512,7 @@ function renderAjkUv(){
   const labels = weeks.map(w=>wLabel(w.week,w.days));
   chartAjkUv.setOption({
     ...chartOpts(),
-    tooltip:{trigger:'axis',backgroundColor:'#1a1d2e',borderColor:'#2a2d3e',textStyle:{color:'#e2e8f0',fontSize:12}},
+    tooltip: makeTip(()=>ajkWeeks.slice(-26), [{key:'uv',isRate:false},{key:'vcuv_rate',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)+'%'),
     legend:{data:['UV（万）','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -505,6 +555,7 @@ function renderW58Kpi(){
     {label:'日均UV（APP+小程序）',val:fmtW(cur.uv),sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
     {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate),sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
     {label:'日均有效连接',val:fmt(cur.conn,0),sub:prev?`环比 <span class="${(cur.conn-prev.conn)>=0?'up':'dn'}">${(cur.conn-prev.conn)>=0?'+':''}${(((cur.conn-prev.conn)/prev.conn)*100).toFixed(1)}%</span>`:'--'},
+    {label:'有效连接/vcuv',val:fmtPct(cur.conn_rate),sub:prev&&prev.conn_rate!=null?`环比 <span class="${(cur.conn_rate-prev.conn_rate)>=0?'up':'dn'}">${(cur.conn_rate-prev.conn_rate)>=0?'+':''}${(cur.conn_rate-prev.conn_rate).toFixed(2)}pp</span>`:'--'},
     {label:'次日返回率',val:cur.retain_1d!=null?fmtPct(cur.retain_1d):'--',sub:prev&&prev.retain_1d!=null?`环比 <span class="${(cur.retain_1d-prev.retain_1d)>=0?'up':'dn'}">${(cur.retain_1d-prev.retain_1d)>=0?'+':''}${(cur.retain_1d-prev.retain_1d).toFixed(2)}pp</span>`:'--'},
   ];
   document.getElementById('w58Kpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
@@ -520,7 +571,7 @@ function renderW58Cmp(){
     {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v)},
     {label:'VCUV/UV',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
     {label:'有效连接用户数',sub:'日均',key:'conn',fmt:v=>fmt(v,0)},
-    {label:'连接/VCUV',key:'conn_rate',fmt:v=>fmtPct(v),isRate:true},
+    {label:'有效连接/vcuv',key:'conn_rate',fmt:v=>fmtPct(v),isRate:true},
     {label:'次日返回率',key:'retain_1d',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── APP vs 小程序'},
     {label:'APP-UV',sub:'日均',key:'uv_app',fmt:v=>fmtW(v)},
@@ -542,6 +593,7 @@ function renderW58Charts(){
   if(!chartW58Uv) chartW58Uv = echarts.init(document.getElementById('w58UvChart'));
   chartW58Uv.setOption({
     ...chartOpts(),
+    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'uv',isRate:false},{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万'),
     legend:{data:['UV合计','APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -553,16 +605,17 @@ function renderW58Charts(){
     ]
   },true);
 
-  // conn rate
+  // 有效连接/VCUV & VCUV/UV rate
   if(!chartW58Conn) chartW58Conn = echarts.init(document.getElementById('w58ConnChart'));
   chartW58Conn.setOption({
     ...chartOpts(),
-    legend:{data:['连接/VCUV(%)','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
+    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'conn_rate',isRate:true},{key:'vcuv_rate',isRate:true}], v=>v.toFixed(2)+'%'),
+    legend:{data:['有效连接/VCUV(%)','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
     yAxis:yAxis(v=>v+'%'),
     series:[
-      {name:'连接/VCUV(%)',type:'line',smooth:true,data:weeks.map(w=>w.conn_rate!=null?+w.conn_rate.toFixed(2):null),itemStyle:{color:'#ef4444'},lineStyle:{width:2},symbolSize:5},
+      {name:'有效连接/VCUV(%)',type:'line',smooth:true,data:weeks.map(w=>w.conn_rate!=null?+w.conn_rate.toFixed(2):null),itemStyle:{color:'#ef4444'},lineStyle:{width:2},symbolSize:5},
       {name:'VCUV/UV(%)',type:'line',smooth:true,data:weeks.map(w=>w.vcuv_rate!=null?+w.vcuv_rate.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{width:2},symbolSize:5},
     ]
   },true);
@@ -571,6 +624,7 @@ function renderW58Charts(){
   if(!chartW58Dev) chartW58Dev = echarts.init(document.getElementById('w58DevChart'));
   chartW58Dev.setOption({
     ...chartOpts(),
+    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万'),
     legend:{data:['APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -585,6 +639,7 @@ function renderW58Charts(){
   if(!chartW58Retain) chartW58Retain = echarts.init(document.getElementById('w58RetainChart'));
   chartW58Retain.setOption({
     ...chartOpts(),
+    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'retain_1d',isRate:true}], v=>v.toFixed(2)+'%'),
     legend:{data:['次日返回率(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -599,8 +654,145 @@ function renderW58Charts(){
   },true);
 }
 
+// ── upload helpers ──
+function formatDate(v) {
+  if (!v) return '';
+  if (typeof v === 'string') return v.slice(0, 10);
+  if (v instanceof Date) {
+    return v.getFullYear() + '-' + String(v.getMonth()+1).padStart(2,'0') + '-' + String(v.getDate()).padStart(2,'0');
+  }
+  // Excel serial number (days since 1900-01-01, with leap year bug)
+  if (typeof v === 'number') {
+    const d = new Date(Date.UTC(1900, 0, 1) + (v - 2) * 86400000);
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
+  }
+  return String(v).slice(0, 10);
+}
+
+function showToast(msg, isErr=false) {
+  const t = document.getElementById('uploadToast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  t.style.borderColor = isErr ? '#ef4444' : '#6366f1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.style.display = 'none', isErr ? 5000 : 3000);
+}
+
+async function handleUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  showToast('正在解析…', false);
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+
+    // ── AJK sheet ──
+    const ajkWs = wb.Sheets['ajk'];
+    if (!ajkWs) { showToast('未找到 ajk sheet', true); return; }
+    const ajkRows = XLSX.utils.sheet_to_json(ajkWs, {header:1, raw:true});
+    const ajkData = [];
+    for (let i = 1; i < ajkRows.length; i++) {
+      const r = ajkRows[i];
+      const dateStr = formatDate(r[0]);
+      if (!dateStr || dateStr.length < 8) continue;
+      const num = v => (v == null || v === '' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
+      const uv = num(r[1]), vcuv = num(r[2]), vcpv = num(r[3]);
+      if (!uv && !vcuv) continue; // skip empty rows
+      const tel_dial = num(r[26]), tel_rate_ai = num(r[28]);
+      const adv_dial = num(r[29]), adv_rate   = num(r[30]);
+      const brk_dial = num(r[31]), brk_rate   = num(r[32]);
+      const view_cnt = num(r[12]), vr_rate     = num(r[34]);
+      const tel_conn  = (tel_dial||0)*(tel_rate_ai||0) + (adv_dial||0)*(adv_rate||0) + (brk_dial||0)*(brk_rate||0);
+      const view_conn = (view_cnt||0) * (vr_rate||0);
+      const chat_eff  = num(r[10]) || 0;
+      const active_conn = Math.round(tel_conn + view_conn + chat_eff);
+      const conn_sub = num(r[11]), conn_ai = num(r[13]), conn_3d = num(r[14]);
+      const conn_broad = num(r[15]), conn_video = num(r[16]);
+      const conn_total = num(r[8]);
+      const rate = (n, d) => (d && n != null) ? +(n/d*100).toFixed(4) : null;
+      ajkData.push({
+        date: dateStr,
+        uv, vcuv, vcpv,
+        vcuv_rate: rate(vcuv, uv),
+        tel_conn: Math.round(tel_conn), chat_eff: num(r[10]), view_conn: Math.round(view_conn),
+        active_conn,
+        conn_total, conn_sub, conn_ai, conn_3d, conn_broad, conn_video,
+        rate_active:   rate(active_conn, vcuv),
+        rate_tel_conn: rate(tel_conn, vcuv),
+        rate_chat_eff: rate(chat_eff, vcuv),
+        rate_view_conn:rate(view_conn, vcuv),
+        rate_total:    rate(conn_total, vcuv),
+        rate_sub:      rate(conn_sub, vcuv),
+        rate_ai:       rate(conn_ai, vcuv),
+        rate_3d:       rate(conn_3d, vcuv),
+        rate_broad:    rate(conn_broad, vcuv),
+        rate_video:    rate(conn_video, vcuv),
+      });
+    }
+
+    // ── 58 sheet ──
+    const w58Ws = wb.Sheets['58'];
+    if (!w58Ws) { showToast('未找到 58 sheet', true); return; }
+    const w58Rows = XLSX.utils.sheet_to_json(w58Ws, {header:1, raw:true});
+    const w58Data = [];
+    for (let i = 1; i < w58Rows.length; i++) {
+      const r = w58Rows[i];
+      const dateStr = formatDate(r[0]);
+      if (!dateStr || dateStr.length < 8) continue;
+      const num = v => (v == null || v === '' || v === 'NaN' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
+      const uv_app  = num(r[4]),  uv_mini  = num(r[5]);
+      const vcuv_app= num(r[11]), vcuv_mini= num(r[12]);
+      const conn_app= num(r[25]), conn_mini= num(r[26]);
+      const uv   = (uv_app||0)   + (uv_mini||0)   || null;
+      const vcuv = (vcuv_app||0) + (vcuv_mini||0) || null;
+      const conn = (conn_app||0) + (conn_mini||0) || null;
+      w58Data.push({
+        date: dateStr,
+        uv, uv_app, uv_mini,
+        vcuv, vcuv_app, vcuv_mini,
+        conn, conn_app, conn_mini,
+        vcuv_rate: (uv&&vcuv) ? +(vcuv/uv*100).toFixed(4) : null,
+        conn_rate: (vcuv&&conn) ? +(conn/vcuv*100).toFixed(4) : null,
+        retain_1d: num(r[30]),
+      });
+    }
+
+    // persist to localStorage
+    localStorage.setItem('conn_data', JSON.stringify({ajk:ajkData, w58:w58Data}));
+    rawAJK = ajkData; rawW58 = w58Data;
+    const lastDate = ajkData[ajkData.length-1]?.date || '--';
+    document.getElementById('updatedText').textContent = '数据至：'+lastDate+'（本地）';
+
+    // dispose old charts before re-render
+    [chartAjkTrend,chartAjkUv,chartAjkConn,chartW58Uv,chartW58Conn,chartW58Dev,chartW58Retain].forEach(c=>c&&c.dispose());
+    chartAjkTrend=chartAjkUv=chartAjkConn=chartW58Uv=chartW58Conn=chartW58Dev=chartW58Retain=null;
+
+    renderAjk();
+    showToast(`解析完成：AJK ${ajkData.length} 天，58 ${w58Data.length} 天`, false);
+  } catch(e) {
+    console.error(e);
+    showToast('解析失败：'+e.message, true);
+  }
+  event.target.value = '';
+}
+
 // ── load ──
 async function loadData(){
+  // try localStorage first (from previous upload)
+  const cached = localStorage.getItem('conn_data');
+  if (cached) {
+    try {
+      const d = JSON.parse(cached);
+      if (d.ajk && d.ajk.length) {
+        rawAJK = d.ajk; rawW58 = d.w58;
+        const lastDate = rawAJK[rawAJK.length-1]?.date || '--';
+        document.getElementById('updatedText').textContent = '数据至：'+lastDate+'（本地）';
+        renderAjk();
+        return;
+      }
+    } catch(e) { localStorage.removeItem('conn_data'); }
+  }
+  // fall back to bundled data
   try{
     const res = await fetch('./data/data.json?t='+Date.now());
     const d = await res.json();
