@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>平台连接数据看板</title>
+<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<style>
+:root {
+  --bg:#0f1117; --card:#1a1d2e; --border:#2a2d3e; --text:#e2e8f0;
+  --muted:#94a3b8; --primary:#6366f1; --danger:#ef4444; --success:#22c55e;
+  --warn:#f59e0b; --tag:#1e293b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang SC',sans-serif;font-size:13px;min-height:100vh}
+.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:16px;height:48px;position:sticky;top:0;z-index:100}
+.topbar-title{font-size:15px;font-weight:600;color:#fff}
+.tabs{display:flex;gap:2px;padding:2px;background:var(--tag);border-radius:8px}
+.tab{padding:5px 20px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:13px;border:none;background:none}
+.tab.active{background:var(--primary);color:#fff}
+.updated{color:var(--muted);font-size:12px;margin-left:auto}
+.container{max-width:1400px;margin:0 auto;padding:16px 20px}
+.page{display:none}.page.active{display:block}
+
+/* Cards */
+.section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.section-hd{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.section-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.kpi-label{color:var(--muted);font-size:12px;margin-bottom:4px}
+.kpi-val{font-size:22px;font-weight:700;color:#fff}
+.kpi-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+/* Week compare table */
+.cmp-table{width:100%;border-collapse:collapse}
+.cmp-table th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.cmp-table td{padding:10px 12px;border-bottom:1px solid rgba(42,45,62,.5);font-size:12px;white-space:nowrap}
+.cmp-table tr:last-child td{border-bottom:none}
+.cmp-table tr:hover td{background:rgba(99,102,241,.04)}
+.num{font-variant-numeric:tabular-nums}
+.up{color:var(--danger)}.dn{color:var(--success)}.flat{color:var(--muted)}
+.metric-name{font-weight:600;color:var(--text)}
+.metric-sub{font-size:11px;color:var(--muted)}
+
+/* Chart */
+.chart-area{height:320px}
+.chart-area-lg{height:400px}
+
+/* Type toggles */
+.type-pills{display:flex;gap:6px;flex-wrap:wrap}
+.type-pill{padding:3px 10px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;transition:all .15s}
+.type-pill.on{color:#fff}
+
+/* Week nav */
+.week-nav{display:flex;gap:6px;flex-wrap:wrap}
+.week-btn{background:var(--tag);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+.week-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+
+/* Device split chart */
+.chart-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.chart-row{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}}
+
+/* period note */
+.period-note{font-size:11px;color:var(--muted);padding:4px 10px;background:var(--tag);border-radius:6px}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-title">📊 平台连接数据看板</span>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('ajk')">安居客 AJK</button>
+    <button class="tab" onclick="switchTab('w58')">58同城</button>
+  </div>
+  <span class="updated" id="updatedText">加载中…</span>
+</div>
+
+<div class="container">
+
+<!-- ══ AJK ══ -->
+<div class="page active" id="page-ajk">
+  <div class="kpi-row" id="ajkKpi"></div>
+
+  <!-- 周对比 -->
+  <div class="section">
+    <div class="section-hd">
+      <span class="section-title">周对比（周四～周三）</span>
+      <div class="week-nav" id="ajkWeekNav"></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="cmp-table" id="ajkCmpTable">
+        <thead><tr>
+          <th>指标</th>
+          <th id="thCur">当前周</th>
+          <th id="thPrev">上一周</th>
+          <th>变化</th>
+          <th>变化%</th>
+        </tr></thead>
+        <tbody id="ajkCmpBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 连接类型趋势 -->
+  <div class="section">
+    <div class="section-hd">
+      <span class="section-title">各连接类型 /vcuv 周趋势</span>
+      <div class="type-pills" id="ajkTypePills"></div>
+    </div>
+    <div class="chart-area-lg" id="ajkTrendChart"></div>
+  </div>
+
+  <!-- UV/VCUV趋势 -->
+  <div class="section">
+    <div class="section-hd"><span class="section-title">UV & VCUV/UV 趋势（周）</span></div>
+    <div class="chart-area" id="ajkUvChart"></div>
+  </div>
+</div>
+
+<!-- ══ 58 ══ -->
+<div class="page" id="page-w58">
+  <div class="kpi-row" id="w58Kpi"></div>
+
+  <div class="section">
+    <div class="section-hd">
+      <span class="section-title">周对比（周四～周三）</span>
+      <div class="week-nav" id="w58WeekNav"></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="cmp-table" id="w58CmpTable">
+        <thead><tr>
+          <th>指标</th>
+          <th id="th58Cur">当前周</th>
+          <th id="th58Prev">上一周</th>
+          <th>变化</th>
+          <th>变化%</th>
+        </tr></thead>
+        <tbody id="w58CmpBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="section">
+      <div class="section-hd"><span class="section-title">UV 周趋势</span></div>
+      <div class="chart-area" id="w58UvChart"></div>
+    </div>
+    <div class="section">
+      <div class="section-hd"><span class="section-title">有效连接/VCUV 周趋势</span></div>
+      <div class="chart-area" id="w58ConnChart"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-hd"><span class="section-title">UV 渠道构成趋势（周）</span></div>
+    <div class="chart-area-lg" id="w58DevChart"></div>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+// ── palette ──
+const COLORS = ['#6366f1','#22d3ee','#f59e0b','#ef4444','#34d399','#a78bfa','#fb923c','#60a5fa','#f472b6'];
+const CONN_TYPES = [
+  {key:'rate_total', label:'总连接量',  color:'#6366f1'},
+  {key:'rate_tel',   label:'电话量',    color:'#22d3ee'},
+  {key:'rate_chat',  label:'微聊对数',  color:'#f59e0b'},
+  {key:'rate_sub',   label:'关注订阅',  color:'#34d399'},
+  {key:'rate_view',  label:'带看对数',  color:'#a78bfa'},
+  {key:'rate_ai',    label:'AI评测',    color:'#fb923c'},
+  {key:'rate_3d',    label:'3D看房',    color:'#60a5fa'},
+  {key:'rate_broad', label:'泛连接',    color:'#f472b6'},
+  {key:'rate_video', label:'视频评测',  color:'#ef4444'},
+];
+
+let rawAJK=[], rawW58=[];
+let ajkWeeks=[], w58Weeks=[];
+let selAjkWeek=0, selW58Week=0;
+let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
+let chartAjkTrend=null, chartAjkUv=null, chartW58Uv=null, chartW58Conn=null, chartW58Dev=null;
+
+// ── helpers ──
+function chartOpts(){ return { backgroundColor:'transparent', tooltip:{trigger:'axis',backgroundColor:'#1a1d2e',borderColor:'#2a2d3e',textStyle:{color:'#e2e8f0',fontSize:12}}, legend:{textStyle:{color:'#94a3b8'},top:0,type:'scroll'}, grid:{left:55,right:20,top:36,bottom:50} }; }
+function xAxis(data){ return {data, axisLabel:{color:'#94a3b8',fontSize:11,rotate:30}, axisLine:{lineStyle:{color:'#2a2d3e'}}}; }
+function yAxis(fmt){ return {axisLabel:{color:'#94a3b8',fontSize:11,formatter:fmt||null}, splitLine:{lineStyle:{color:'#2a2d3e'}}}; }
+function fmt(v,d=2){ return v==null?'--':Number(v).toLocaleString('zh-CN',{minimumFractionDigits:0,maximumFractionDigits:d}); }
+function fmtW(v){ return v==null?'--':(v/10000).toFixed(2)+'万'; }
+function fmtPct(v){ return v==null?'--':v.toFixed(2)+'%'; }
+function chgEl(cur,prev,isRate=false){
+  if(cur==null||prev==null) return '<span class="flat">--</span>';
+  const diff = cur-prev;
+  const pct = prev!==0 ? diff/Math.abs(prev)*100 : null;
+  const cls = diff>0?'up':diff<0?'dn':'flat';
+  const sign = diff>0?'+':'';
+  const diffStr = isRate ? `${sign}${diff.toFixed(2)}pp` : `${sign}${fmt(diff,0)}`;
+  const pctStr = pct!=null ? `${sign}${pct.toFixed(1)}%` : '--';
+  return `<span class="${cls}">${diffStr}</span>|<span class="${cls}">${pctStr}</span>`;
+}
+
+// ── week aggregation (Thu-based) ──
+function groupByWeek(daily){
+  const map = {};
+  daily.forEach(d => {
+    const wk = d.week_thu;
+    if(!map[wk]) map[wk] = {week:wk, days:[], _uv:0,_vcuv:0,
+      _conn_total:0,_conn_tel:0,_conn_chat:0,_conn_sub:0,_conn_view:0,_conn_ai:0,_conn_3d:0,_conn_broad:0,_conn_video:0};
+    const w = map[wk];
+    w.days.push(d.date);
+    if(d.uv)   w._uv   += d.uv;
+    if(d.vcuv) w._vcuv += d.vcuv;
+    ['conn_total','conn_tel','conn_chat','conn_sub','conn_view','conn_ai','conn_3d','conn_broad','conn_video'].forEach(k=>{
+      if(d[k]) w['_'+k] += d[k];
+    });
+  });
+  return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w => {
+    const v = w._vcuv;
+    const rate = (k) => v ? +(w['_'+k]/v*100).toFixed(4) : null;
+    return { ...w,
+      uv:w._uv, vcuv:w._vcuv,
+      vcuv_rate: w._uv ? +(w._vcuv/w._uv*100).toFixed(4) : null,
+      conn_total:w._conn_total, conn_tel:w._conn_tel, conn_chat:w._conn_chat,
+      conn_sub:w._conn_sub, conn_view:w._conn_view, conn_ai:w._conn_ai,
+      conn_3d:w._conn_3d, conn_broad:w._conn_broad, conn_video:w._conn_video,
+      rate_total:rate('conn_total'), rate_tel:rate('conn_tel'), rate_chat:rate('conn_chat'),
+      rate_sub:rate('conn_sub'), rate_view:rate('conn_view'), rate_ai:rate('conn_ai'),
+      rate_3d:rate('conn_3d'), rate_broad:rate('conn_broad'), rate_video:rate('conn_video'),
+    };
+  });
+}
+
+function groupByWeek58(daily){
+  const map = {};
+  daily.filter(d=>d.uv_total).forEach(d => {
+    const wk = d.week_thu;
+    if(!map[wk]) map[wk] = {week:wk, days:[],
+      _uv:0,_uv_pc:0,_uv_m:0,_uv_app:0,_uv_mini:0,
+      _vcuv:0,_conn:0};
+    const w = map[wk];
+    w.days.push(d.date);
+    w._uv    += d.uv_total||0;
+    w._uv_pc  += d.uv_pc||0;
+    w._uv_m   += d.uv_m||0;
+    w._uv_app += d.uv_app||0;
+    w._uv_mini+= d.uv_mini||0;
+    w._vcuv   += d.vcuv_total||0;
+    w._conn   += d.conn_total||0;
+  });
+  return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w=>({
+    ...w,
+    uv:w._uv, uv_pc:w._uv_pc, uv_m:w._uv_m, uv_app:w._uv_app, uv_mini:w._uv_mini,
+    vcuv:w._vcuv, conn:w._conn,
+    vcuv_rate: w._uv ? +(w._vcuv/w._uv*100).toFixed(4) : null,
+    conn_rate: w._vcuv ? +(w._conn/w._vcuv*100).toFixed(4) : null,
+  }));
+}
+
+function wLabel(thuStr, days){
+  // e.g. "04.10～04.15"
+  const d = new Date(thuStr+'T00:00:00');
+  const end = new Date(d); end.setDate(d.getDate()+6);
+  const f = x=>`${x.getMonth()+1}.${x.getDate()}`;
+  const actualEnd = days && days.length ? days[days.length-1] : null;
+  const endD = actualEnd ? new Date(actualEnd+'T00:00:00') : end;
+  return `${f(d)}～${f(endD)}`;
+}
+
+// ── tab ──
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['ajk','w58'][i]===name));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  if(name==='w58') setTimeout(()=>renderW58(),60);
+}
+
+// ══ AJK ══
+function renderAjk(){
+  ajkWeeks = groupByWeek(rawAJK);
+  selAjkWeek = ajkWeeks.length-1;
+  buildAjkWeekNav();
+  renderAjkKpi();
+  renderAjkCmp();
+  buildAjkTypePills();
+  renderAjkTrend();
+  renderAjkUv();
+}
+
+function buildAjkWeekNav(){
+  const nav = document.getElementById('ajkWeekNav');
+  // show last 8 weeks
+  const start = Math.max(0, ajkWeeks.length-8);
+  nav.innerHTML = ajkWeeks.slice(start).map((w,i)=>{
+    const idx = start+i;
+    return `<button class="week-btn ${idx===selAjkWeek?'active':''}" onclick="selAjkWeek=${idx};buildAjkWeekNav();renderAjkKpi();renderAjkCmp()">${wLabel(w.week,w.days)}</button>`;
+  }).join('');
+}
+
+function renderAjkKpi(){
+  const cur = ajkWeeks[selAjkWeek];
+  const prev = selAjkWeek>0?ajkWeeks[selAjkWeek-1]:null;
+  const uvChg = prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
+  const connChg = prev?(cur.rate_total-prev.rate_total).toFixed(2):null;
+  const kpis=[
+    {label:'周UV',val:fmtW(cur.uv), sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
+    {label:'周VCUV',val:fmtW(cur.vcuv), sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
+    {label:'总连接/vcuv',val:fmtPct(cur.rate_total), sub:connChg!=null?`环比 <span class="${+connChg>=0?'up':'dn'}">${+connChg>=0?'+':''}${connChg}pp</span>`:'--'},
+    {label:'微聊对数/vcuv',val:fmtPct(cur.rate_chat), sub:`电话 ${fmtPct(cur.rate_tel)} · 视频 ${fmtPct(cur.rate_video)}`},
+  ];
+  document.getElementById('ajkKpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
+}
+
+function renderAjkCmp(){
+  const cur = ajkWeeks[selAjkWeek];
+  const prev = selAjkWeek>0?ajkWeeks[selAjkWeek-1]:null;
+  document.getElementById('thCur').textContent = wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
+  if(prev) document.getElementById('thPrev').textContent = wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
+
+  const rows=[
+    {label:'UV',sub:'周累计',key:'uv',fmt:v=>fmtW(v),isRate:false},
+    {label:'VCUV',sub:'周累计',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
+    {label:'VCUV/UV',sub:'率',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
+    {sep:true,label:'── 连接转化（/vcuv）'},
+    {label:'总连接量/vcuv',key:'rate_total',fmt:v=>fmtPct(v),isRate:true},
+    {label:'电话量/vcuv',key:'rate_tel',fmt:v=>fmtPct(v),isRate:true},
+    {label:'微聊对数/vcuv',key:'rate_chat',fmt:v=>fmtPct(v),isRate:true},
+    {label:'关注订阅/vcuv',key:'rate_sub',fmt:v=>fmtPct(v),isRate:true},
+    {label:'带看对数/vcuv',key:'rate_view',fmt:v=>fmtPct(v),isRate:true},
+    {label:'AI评测/vcuv',key:'rate_ai',fmt:v=>fmtPct(v),isRate:true},
+    {label:'3D看房/vcuv',key:'rate_3d',fmt:v=>fmtPct(v),isRate:true},
+    {label:'泛连接/vcuv',key:'rate_broad',fmt:v=>fmtPct(v),isRate:true},
+    {label:'视频评测/vcuv',key:'rate_video',fmt:v=>fmtPct(v),isRate:true},
+    {sep:true,label:'── 绝对量（周累计）'},
+    {label:'总连接量',key:'conn_total',fmt:v=>fmt(v,0),isRate:false},
+    {label:'微聊对数',key:'conn_chat',fmt:v=>fmt(v,0),isRate:false},
+    {label:'电话量',key:'conn_tel',fmt:v=>fmt(v,0),isRate:false},
+    {label:'视频评测',key:'conn_video',fmt:v=>fmt(v,0),isRate:false},
+  ];
+
+  document.getElementById('ajkCmpBody').innerHTML = rows.map(r=>{
+    if(r.sep) return `<tr><td colspan="5" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
+    const cv=cur[r.key], pv=prev?prev[r.key]:null;
+    const chgParts = prev ? chgEl(cv,pv,r.isRate).split('|') : ['--','--'];
+    return `<tr>
+      <td><span class="metric-name">${r.label}</span>${r.sub?`<br><span class="metric-sub">${r.sub}</span>`:''}</td>
+      <td class="num">${r.fmt(cv)}</td>
+      <td class="num">${prev?r.fmt(pv):'--'}</td>
+      <td class="num">${chgParts[0]}</td>
+      <td class="num">${chgParts[1]}</td>
+    </tr>`;
+  }).join('');
+}
+
+function buildAjkTypePills(){
+  const container = document.getElementById('ajkTypePills');
+  container.innerHTML = CONN_TYPES.map(t=>`
+    <button class="type-pill on" id="pill-${t.key}" style="border-color:${t.color};background:${t.color}22"
+      onclick="toggleType('${t.key}','${t.color}')">${t.label}</button>
+  `).join('');
+}
+
+function toggleType(key, color){
+  if(activeTypes.has(key)) activeTypes.delete(key);
+  else activeTypes.add(key);
+  const pill = document.getElementById('pill-'+key);
+  pill.classList.toggle('on', activeTypes.has(key));
+  pill.style.background = activeTypes.has(key) ? color+'22' : 'transparent';
+  renderAjkTrend();
+}
+
+function renderAjkTrend(){
+  if(!chartAjkTrend) chartAjkTrend = echarts.init(document.getElementById('ajkTrendChart'));
+  const weeks = ajkWeeks.slice(-26); // last 26 weeks
+  const labels = weeks.map(w=>wLabel(w.week,w.days));
+  const opts = {...chartOpts(), xAxis:xAxis(labels), yAxis:yAxis(v=>v+'%'),
+    series: CONN_TYPES.filter(t=>activeTypes.has(t.key)).map(t=>({
+      name:t.label, type:'line', smooth:true,
+      data: weeks.map(w=>w[t.key]!=null?+w[t.key].toFixed(3):null),
+      itemStyle:{color:t.color}, lineStyle:{color:t.color,width:2},
+      symbolSize:4, connectNulls:true,
+    }))
+  };
+  chartAjkTrend.setOption(opts, true);
+}
+
+function renderAjkUv(){
+  if(!chartAjkUv) chartAjkUv = echarts.init(document.getElementById('ajkUvChart'));
+  const weeks = ajkWeeks.slice(-26);
+  const labels = weeks.map(w=>wLabel(w.week,w.days));
+  chartAjkUv.setOption({
+    ...chartOpts(),
+    tooltip:{trigger:'axis',backgroundColor:'#1a1d2e',borderColor:'#2a2d3e',textStyle:{color:'#e2e8f0',fontSize:12}},
+    legend:{data:['UV（万）','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:55,right:55,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:[
+      {name:'万',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>(v/10000).toFixed(0)},splitLine:{lineStyle:{color:'#2a2d3e'}}},
+      {name:'%',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
+    ],
+    series:[
+      {name:'UV（万）',type:'bar',data:weeks.map(w=>w.uv),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'VCUV/UV(%)',type:'line',smooth:true,data:weeks.map(w=>w.vcuv_rate!=null?+w.vcuv_rate.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:5,yAxisIndex:1},
+    ]
+  },true);
+}
+
+// ══ 58 ══
+function renderW58(){
+  const recentW58 = rawW58.filter(d=>d.date>='2024-01-01');
+  w58Weeks = groupByWeek58(recentW58);
+  selW58Week = w58Weeks.length-1;
+  buildW58WeekNav();
+  renderW58Kpi();
+  renderW58Cmp();
+  renderW58Charts();
+}
+
+function buildW58WeekNav(){
+  const nav = document.getElementById('w58WeekNav');
+  const start = Math.max(0, w58Weeks.length-8);
+  nav.innerHTML = w58Weeks.slice(start).map((w,i)=>{
+    const idx=start+i;
+    return `<button class="week-btn ${idx===selW58Week?'active':''}" onclick="selW58Week=${idx};buildW58WeekNav();renderW58Kpi();renderW58Cmp()">${wLabel(w.week,w.days)}</button>`;
+  }).join('');
+}
+
+function renderW58Kpi(){
+  const cur=w58Weeks[selW58Week], prev=selW58Week>0?w58Weeks[selW58Week-1]:null;
+  const uvChg=prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
+  const connChg=prev?(cur.conn_rate-prev.conn_rate).toFixed(2):null;
+  const kpis=[
+    {label:'周UV',val:fmtW(cur.uv),sub:uvChg!=null?`环比 <span class="${+uvChg>=0?'up':'dn'}">${+uvChg>=0?'+':''}${uvChg}%</span>`:'--'},
+    {label:'周VCUV',val:fmtW(cur.vcuv),sub:`VCUV/UV ${fmtPct(cur.vcuv_rate)}`},
+    {label:'有效连接用户数',val:fmt(cur.conn,0),sub:`连接/VCUV ${fmtPct(cur.conn_rate)}`},
+    {label:'APP占UV比',val:cur.uv?fmtPct(cur.uv_app/cur.uv*100):'--',sub:`小程序 ${cur.uv?fmtPct(cur.uv_mini/cur.uv*100):'--'}`},
+  ];
+  document.getElementById('w58Kpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
+}
+
+function renderW58Cmp(){
+  const cur=w58Weeks[selW58Week], prev=selW58Week>0?w58Weeks[selW58Week-1]:null;
+  document.getElementById('th58Cur').textContent=wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
+  if(prev) document.getElementById('th58Prev').textContent=wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
+
+  const rows=[
+    {label:'UV',key:'uv',fmt:v=>fmtW(v)},
+    {label:'VCUV',key:'vcuv',fmt:v=>fmtW(v)},
+    {label:'VCUV/UV',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
+    {label:'有效连接用户数',key:'conn',fmt:v=>fmt(v,0)},
+    {label:'连接/VCUV',key:'conn_rate',fmt:v=>fmtPct(v),isRate:true},
+    {sep:true,label:'── UV渠道构成'},
+    {label:'APP-UV',key:'uv_app',fmt:v=>fmtW(v)},
+    {label:'PC-UV',key:'uv_pc',fmt:v=>fmtW(v)},
+    {label:'M-UV',key:'uv_m',fmt:v=>fmtW(v)},
+    {label:'小程序-UV',key:'uv_mini',fmt:v=>fmtW(v)},
+  ];
+  document.getElementById('w58CmpBody').innerHTML = rows.map(r=>{
+    if(r.sep) return `<tr><td colspan="5" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
+    const cv=cur[r.key], pv=prev?prev[r.key]:null;
+    const chgParts=prev?chgEl(cv,pv,!!r.isRate).split('|'):['--','--'];
+    return `<tr><td class="metric-name">${r.label}</td><td class="num">${r.fmt(cv)}</td><td class="num">${prev?r.fmt(pv):'--'}</td><td class="num">${chgParts[0]}</td><td class="num">${chgParts[1]}</td></tr>`;
+  }).join('');
+}
+
+function renderW58Charts(){
+  const weeks = w58Weeks.slice(-26);
+  const labels = weeks.map(w=>wLabel(w.week,w.days));
+
+  // UV trend
+  if(!chartW58Uv) chartW58Uv = echarts.init(document.getElementById('w58UvChart'));
+  chartW58Uv.setOption({
+    ...chartOpts(),
+    legend:{data:['总UV','APP','PC','M','小程序'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:55,right:20,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:yAxis(v=>(v/10000).toFixed(0)+'万'),
+    series:[
+      {name:'总UV',type:'line',smooth:true,data:weeks.map(w=>w.uv),itemStyle:{color:'#6366f1'},lineStyle:{width:2.5},symbolSize:4},
+      {name:'APP',type:'line',smooth:true,data:weeks.map(w=>w.uv_app),itemStyle:{color:'#22d3ee'},lineStyle:{width:1.5},symbolSize:3},
+      {name:'PC',type:'line',smooth:true,data:weeks.map(w=>w.uv_pc),itemStyle:{color:'#f59e0b'},lineStyle:{width:1.5},symbolSize:3},
+      {name:'M',type:'line',smooth:true,data:weeks.map(w=>w.uv_m),itemStyle:{color:'#34d399'},lineStyle:{width:1.5},symbolSize:3},
+      {name:'小程序',type:'line',smooth:true,data:weeks.map(w=>w.uv_mini),itemStyle:{color:'#a78bfa'},lineStyle:{width:1.5},symbolSize:3},
+    ]
+  },true);
+
+  // conn rate
+  if(!chartW58Conn) chartW58Conn = echarts.init(document.getElementById('w58ConnChart'));
+  chartW58Conn.setOption({
+    ...chartOpts(),
+    legend:{data:['连接/VCUV(%)','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:55,right:20,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:yAxis(v=>v+'%'),
+    series:[
+      {name:'连接/VCUV(%)',type:'line',smooth:true,data:weeks.map(w=>w.conn_rate!=null?+w.conn_rate.toFixed(2):null),itemStyle:{color:'#ef4444'},lineStyle:{width:2},symbolSize:5},
+      {name:'VCUV/UV(%)',type:'line',smooth:true,data:weeks.map(w=>w.vcuv_rate!=null?+w.vcuv_rate.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{width:2},symbolSize:5},
+    ]
+  },true);
+
+  // device stack
+  if(!chartW58Dev) chartW58Dev = echarts.init(document.getElementById('w58DevChart'));
+  chartW58Dev.setOption({
+    ...chartOpts(),
+    legend:{data:['APP','小程序','PC','M'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:55,right:20,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:yAxis(v=>(v/10000).toFixed(0)+'万'),
+    series:[
+      {name:'APP',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_app),itemStyle:{color:'#6366f1'}},
+      {name:'小程序',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_mini),itemStyle:{color:'#a78bfa'}},
+      {name:'PC',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_pc),itemStyle:{color:'#22d3ee'}},
+      {name:'M',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_m),itemStyle:{color:'#34d399'}},
+    ]
+  },true);
+}
+
+// ── load ──
+async function loadData(){
+  try{
+    const res = await fetch('./data/data.json?t='+Date.now());
+    const d = await res.json();
+    rawAJK = d.ajk;
+    rawW58 = d.w58;
+    const lastDate = rawAJK[rawAJK.length-1].date;
+    document.getElementById('updatedText').textContent = '数据至：'+lastDate;
+    renderAjk();
+  } catch(e){
+    console.error(e);
+    document.getElementById('updatedText').textContent = '加载失败：'+e.message;
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
