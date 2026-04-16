@@ -240,7 +240,7 @@ function groupByWeek(daily){
     // 新口径总连接 = 主动连接 + 其他
     w._conn_computed += (d.active_conn||0) + (d.conn_sub||0) + (d.conn_ai||0) + (d.conn_3d||0) + (d.conn_broad||0) + (d.conn_video||0);
   });
-  // sort by idx ascending so index 0 (most recent) is last → weeks[weeks.length-1]
+  // sort descending by idx → oldest (high idx) first, newest (idx=0) last
   return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w => {
     const n = w.days.length;
     const avg = k => Math.round(w['_'+k]/n);
@@ -263,7 +263,7 @@ function groupByWeek(daily){
       rate_total:rate('conn_total'), rate_sub:rate('conn_sub'), rate_ai:rate('conn_ai'),
       rate_3d:rate('conn_3d'), rate_broad:rate('conn_broad'), rate_video:rate('conn_video'),
     };
-  }).reverse(); // oldest first so weeks[weeks.length-1] = current
+  });
 }
 
 function groupByWeek58(daily){
@@ -300,7 +300,7 @@ function groupByWeek58(daily){
       conn_rate: vcuv ? +(conn/vcuv*100).toFixed(4) : null,
       retain_1d: w._retain_n ? +(w._retain_sum/w._retain_n*100).toFixed(2) : null,
     };
-  }).reverse();
+  });
 }
 
 function wLabel(weekStart, days){
