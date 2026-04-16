@@ -554,7 +554,6 @@ function renderW58Kpi(){
   const kpis=[
     {label:'日均UV（APP+小程序）',val:fmtW(cur.uv),sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
     {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate),sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
-    {label:'日均有效连接',val:fmt(cur.conn,0),sub:prev?`环比 <span class="${(cur.conn-prev.conn)>=0?'up':'dn'}">${(cur.conn-prev.conn)>=0?'+':''}${(((cur.conn-prev.conn)/prev.conn)*100).toFixed(1)}%</span>`:'--'},
     {label:'有效连接/vcuv',val:fmtPct(cur.conn_rate),sub:prev&&prev.conn_rate!=null?`环比 <span class="${(cur.conn_rate-prev.conn_rate)>=0?'up':'dn'}">${(cur.conn_rate-prev.conn_rate)>=0?'+':''}${(cur.conn_rate-prev.conn_rate).toFixed(2)}pp</span>`:'--'},
     {label:'次日返回率',val:cur.retain_1d!=null?fmtPct(cur.retain_1d):'--',sub:prev&&prev.retain_1d!=null?`环比 <span class="${(cur.retain_1d-prev.retain_1d)>=0?'up':'dn'}">${(cur.retain_1d-prev.retain_1d)>=0?'+':''}${(cur.retain_1d-prev.retain_1d).toFixed(2)}pp</span>`:'--'},
   ];
@@ -659,7 +658,8 @@ function formatDate(v) {
   if (!v) return '';
   if (typeof v === 'string') return v.slice(0, 10);
   if (v instanceof Date) {
-    return v.getFullYear() + '-' + String(v.getMonth()+1).padStart(2,'0') + '-' + String(v.getDate()).padStart(2,'0');
+    // use UTC to avoid timezone shift (SheetJS stores dates as UTC midnight)
+    return v.getUTCFullYear() + '-' + String(v.getUTCMonth()+1).padStart(2,'0') + '-' + String(v.getUTCDate()).padStart(2,'0');
   }
   // Excel serial number (days since 1900-01-01, with leap year bug)
   if (typeof v === 'number') {
