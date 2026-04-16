@@ -144,18 +144,24 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
 
   <div class="chart-row">
     <div class="section">
-      <div class="section-hd"><span class="section-title">UV 周趋势</span></div>
+      <div class="section-hd"><span class="section-title">UV 周趋势（APP+小程序）</span></div>
       <div class="chart-area" id="w58UvChart"></div>
     </div>
     <div class="section">
-      <div class="section-hd"><span class="section-title">有效连接/VCUV 周趋势</span></div>
+      <div class="section-hd"><span class="section-title">有效连接/VCUV & VCUV/UV 周趋势</span></div>
       <div class="chart-area" id="w58ConnChart"></div>
     </div>
   </div>
 
-  <div class="section">
-    <div class="section-hd"><span class="section-title">UV 渠道构成趋势（周）</span></div>
-    <div class="chart-area-lg" id="w58DevChart"></div>
+  <div class="chart-row">
+    <div class="section">
+      <div class="section-hd"><span class="section-title">APP vs 小程序 UV 构成趋势（周）</span></div>
+      <div class="chart-area" id="w58DevChart"></div>
+    </div>
+    <div class="section">
+      <div class="section-hd"><span class="section-title">次日返回率 周趋势</span></div>
+      <div class="chart-area" id="w58RetainChart"></div>
+    </div>
   </div>
 </div>
 
@@ -181,7 +187,7 @@ let rawAJK=[], rawW58=[];
 let ajkWeeks=[], w58Weeks=[];
 let selAjkWeek=0, selW58Week=0;
 let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
-let chartAjkTrend=null, chartAjkUv=null, chartW58Uv=null, chartW58Conn=null, chartW58Dev=null;
+let chartAjkTrend=null, chartAjkUv=null, chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
 
 // ── helpers ──
 function chartOpts(){ return { backgroundColor:'transparent', tooltip:{trigger:'axis',backgroundColor:'#1a1d2e',borderColor:'#2a2d3e',textStyle:{color:'#e2e8f0',fontSize:12}}, legend:{textStyle:{color:'#94a3b8'},top:0,type:'scroll'}, grid:{left:55,right:20,top:36,bottom:50} }; }
@@ -240,30 +246,30 @@ function groupByWeek(daily){
 
 function groupByWeek58(daily){
   const map = {};
-  daily.filter(d=>d.uv_total).forEach(d => {
+  daily.filter(d=>d.uv).forEach(d => {
     const wk = d.week_thu;
     if(!map[wk]) map[wk] = {week:wk, days:[],
-      _uv:0,_uv_pc:0,_uv_m:0,_uv_app:0,_uv_mini:0,
-      _vcuv:0,_conn:0};
+      _uv:0,_uv_app:0,_uv_mini:0,_vcuv:0,_conn:0,
+      _retain_sum:0,_retain_n:0};
     const w = map[wk];
     w.days.push(d.date);
-    w._uv    += d.uv_total||0;
-    w._uv_pc  += d.uv_pc||0;
-    w._uv_m   += d.uv_m||0;
-    w._uv_app += d.uv_app||0;
-    w._uv_mini+= d.uv_mini||0;
-    w._vcuv   += d.vcuv_total||0;
-    w._conn   += d.conn_total||0;
+    w._uv      += d.uv||0;
+    w._uv_app  += d.uv_app||0;
+    w._uv_mini += d.uv_mini||0;
+    w._vcuv    += d.vcuv||0;
+    w._conn    += d.conn||0;
+    if(d.retain_1d!=null){ w._retain_sum += d.retain_1d; w._retain_n++; }
   });
   return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w=>{
     const n = w.days.length;
     const avg = k => Math.round(w['_'+k]/n);
     const uv=avg('uv'), vcuv=avg('vcuv'), conn=avg('conn');
     return { ...w,
-      uv, uv_pc:avg('uv_pc'), uv_m:avg('uv_m'), uv_app:avg('uv_app'), uv_mini:avg('uv_mini'),
+      uv, uv_app:avg('uv_app'), uv_mini:avg('uv_mini'),
       vcuv, conn,
       vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
       conn_rate: vcuv ? +(conn/vcuv*100).toFixed(4) : null,
+      retain_1d: w._retain_n ? +(w._retain_sum/w._retain_n*100).toFixed(2) : null,
     };
   });
 }
@@ -446,10 +452,10 @@ function renderW58Kpi(){
   const uvChg=prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
   const connChg=prev?(cur.conn_rate-prev.conn_rate).toFixed(2):null;
   const kpis=[
-    {label:'日均UV',val:fmtW(cur.uv),sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
+    {label:'日均UV（APP+小程序）',val:fmtW(cur.uv),sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
     {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate),sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
-    {label:'日均有效连接用户数',val:fmt(cur.conn,0),sub:`连接/VCUV ${fmtPct(cur.conn_rate)}`},
-    {label:'APP占UV比',val:cur.uv?fmtPct(cur.uv_app/cur.uv*100):'--',sub:`小程序 ${cur.uv?fmtPct(cur.uv_mini/cur.uv*100):'--'}`},
+    {label:'日均有效连接',val:fmt(cur.conn,0),sub:prev?`环比 <span class="${(cur.conn-prev.conn)>=0?'up':'dn'}">${(cur.conn-prev.conn)>=0?'+':''}${(((cur.conn-prev.conn)/prev.conn)*100).toFixed(1)}%</span>`:'--'},
+    {label:'次日返回率',val:cur.retain_1d!=null?fmtPct(cur.retain_1d):'--',sub:prev&&prev.retain_1d!=null?`环比 <span class="${(cur.retain_1d-prev.retain_1d)>=0?'up':'dn'}">${(cur.retain_1d-prev.retain_1d)>=0?'+':''}${(cur.retain_1d-prev.retain_1d).toFixed(2)}pp</span>`:'--'},
   ];
   document.getElementById('w58Kpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
 }
@@ -460,15 +466,14 @@ function renderW58Cmp(){
   if(prev) document.getElementById('th58Prev').textContent=wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
 
   const rows=[
-    {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v)},
+    {label:'UV（APP+小程序）',sub:'日均',key:'uv',fmt:v=>fmtW(v)},
     {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v)},
     {label:'VCUV/UV',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
     {label:'有效连接用户数',sub:'日均',key:'conn',fmt:v=>fmt(v,0)},
     {label:'连接/VCUV',key:'conn_rate',fmt:v=>fmtPct(v),isRate:true},
-    {sep:true,label:'── UV渠道构成'},
+    {label:'次日返回率',key:'retain_1d',fmt:v=>fmtPct(v),isRate:true},
+    {sep:true,label:'── APP vs 小程序'},
     {label:'APP-UV',sub:'日均',key:'uv_app',fmt:v=>fmtW(v)},
-    {label:'PC-UV',sub:'日均',key:'uv_pc',fmt:v=>fmtW(v)},
-    {label:'M-UV',sub:'日均',key:'uv_m',fmt:v=>fmtW(v)},
     {label:'小程序-UV',sub:'日均',key:'uv_mini',fmt:v=>fmtW(v)},
   ];
   document.getElementById('w58CmpBody').innerHTML = rows.map(r=>{
@@ -483,19 +488,17 @@ function renderW58Charts(){
   const weeks = w58Weeks.slice(-26);
   const labels = weeks.map(w=>wLabel(w.week,w.days));
 
-  // UV trend
+  // UV trend (APP + 小程序)
   if(!chartW58Uv) chartW58Uv = echarts.init(document.getElementById('w58UvChart'));
   chartW58Uv.setOption({
     ...chartOpts(),
-    legend:{data:['总UV','APP','PC','M','小程序'],textStyle:{color:'#94a3b8'},top:0},
+    legend:{data:['UV合计','APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
     yAxis:yAxis(v=>(v/10000).toFixed(0)+'万'),
     series:[
-      {name:'总UV',type:'line',smooth:true,data:weeks.map(w=>w.uv),itemStyle:{color:'#6366f1'},lineStyle:{width:2.5},symbolSize:4},
+      {name:'UV合计',type:'line',smooth:true,data:weeks.map(w=>w.uv),itemStyle:{color:'#6366f1'},lineStyle:{width:2.5},symbolSize:4},
       {name:'APP',type:'line',smooth:true,data:weeks.map(w=>w.uv_app),itemStyle:{color:'#22d3ee'},lineStyle:{width:1.5},symbolSize:3},
-      {name:'PC',type:'line',smooth:true,data:weeks.map(w=>w.uv_pc),itemStyle:{color:'#f59e0b'},lineStyle:{width:1.5},symbolSize:3},
-      {name:'M',type:'line',smooth:true,data:weeks.map(w=>w.uv_m),itemStyle:{color:'#34d399'},lineStyle:{width:1.5},symbolSize:3},
       {name:'小程序',type:'line',smooth:true,data:weeks.map(w=>w.uv_mini),itemStyle:{color:'#a78bfa'},lineStyle:{width:1.5},symbolSize:3},
     ]
   },true);
@@ -514,20 +517,35 @@ function renderW58Charts(){
     ]
   },true);
 
-  // device stack
+  // APP vs 小程序 stack
   if(!chartW58Dev) chartW58Dev = echarts.init(document.getElementById('w58DevChart'));
   chartW58Dev.setOption({
     ...chartOpts(),
-    legend:{data:['APP','小程序','PC','M'],textStyle:{color:'#94a3b8'},top:0},
+    legend:{data:['APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
     yAxis:yAxis(v=>(v/10000).toFixed(0)+'万'),
     series:[
-      {name:'APP',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_app),itemStyle:{color:'#6366f1'}},
-      {name:'小程序',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_mini),itemStyle:{color:'#a78bfa'}},
-      {name:'PC',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_pc),itemStyle:{color:'#22d3ee'}},
-      {name:'M',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_m),itemStyle:{color:'#34d399'}},
+      {name:'APP',   type:'bar',stack:'uv',data:weeks.map(w=>w.uv_app), itemStyle:{color:'#6366f1',borderRadius:[0,0,0,0]}},
+      {name:'小程序',type:'bar',stack:'uv',data:weeks.map(w=>w.uv_mini),itemStyle:{color:'#a78bfa',borderRadius:[3,3,0,0]}},
     ]
+  },true);
+
+  // 次日返回率
+  if(!chartW58Retain) chartW58Retain = echarts.init(document.getElementById('w58RetainChart'));
+  chartW58Retain.setOption({
+    ...chartOpts(),
+    legend:{data:['次日返回率(%)'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:55,right:20,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:yAxis(v=>v+'%'),
+    series:[{
+      name:'次日返回率(%)',type:'line',smooth:true,
+      data:weeks.map(w=>w.retain_1d!=null?+w.retain_1d.toFixed(2):null),
+      itemStyle:{color:'#34d399'},lineStyle:{color:'#34d399',width:2},
+      symbolSize:5,connectNulls:false,
+      areaStyle:{color:'#34d399',opacity:.08},
+    }]
   },true);
 }
 
