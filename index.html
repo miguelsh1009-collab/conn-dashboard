@@ -213,15 +213,21 @@ function chgEl(cur,prev,isRate=false){
   return `<span class="${cls}">${diffStr}</span>|<span class="${cls}">${pctStr}</span>`;
 }
 
-// ── week aggregation (Thu-based) ──
+// ── week aggregation: rolling 7-day windows backwards from last date ──
 function groupByWeek(daily){
+  const sorted = [...daily].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted.length) return [];
+  const lastD = new Date(sorted[sorted.length-1].date+'T00:00:00');
+
   const map = {};
-  daily.forEach(d => {
-    const wk = d.week_thu;
-    if(!map[wk]) map[wk] = {week:wk, days:[], _uv:0,_vcuv:0,_vcpv:0,
+  sorted.forEach(d => {
+    const diff = Math.round((lastD - new Date(d.date+'T00:00:00'))/86400000);
+    const idx = Math.floor(diff/7); // 0=当前周, 1=上周, ...
+    if(!map[idx]) map[idx] = {idx, days:[],
+      _uv:0,_vcuv:0,_vcpv:0,
       _active_conn:0,_tel_conn:0,_chat_eff:0,_view_conn:0,
       _conn_total:0,_conn_sub:0,_conn_ai:0,_conn_3d:0,_conn_broad:0,_conn_video:0};
-    const w = map[wk];
+    const w = map[idx];
     w.days.push(d.date);
     if(d.uv)   w._uv   += d.uv;
     if(d.vcuv) w._vcuv += d.vcuv;
@@ -231,15 +237,20 @@ function groupByWeek(daily){
       if(d[k]) w['_'+k] += d[k];
     });
   });
-  return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w => {
+  // sort by idx ascending so index 0 (most recent) is last → weeks[weeks.length-1]
+  return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w => {
     const n = w.days.length;
     const avg = k => Math.round(w['_'+k]/n);
     const uv = avg('uv'), vcuv = avg('vcuv'), vcpv = avg('vcpv');
     const rate = k => vcuv ? +(avg(k)/vcuv*100).toFixed(4) : null;
+    // week label from actual date range
+    const ds = w.days.slice().sort();
+    w.week = ds[0]; // start date for reference
+    w.weekEnd = ds[ds.length-1];
     return { ...w,
       uv, vcuv, vcpv,
-      vcuv_rate:  uv   ? +(vcuv/uv*100).toFixed(4)  : null,
-      vcpv_vcuv:  vcuv ? +(vcpv/vcuv).toFixed(4)    : null,
+      vcuv_rate: uv   ? +(vcuv/uv*100).toFixed(4) : null,
+      vcpv_vcuv: vcuv ? +(vcpv/vcuv).toFixed(4)   : null,
       active_conn:avg('active_conn'), tel_conn:avg('tel_conn'), chat_eff:avg('chat_eff'), view_conn:avg('view_conn'),
       conn_total:avg('conn_total'), conn_sub:avg('conn_sub'), conn_ai:avg('conn_ai'),
       conn_3d:avg('conn_3d'), conn_broad:avg('conn_broad'), conn_video:avg('conn_video'),
@@ -247,17 +258,22 @@ function groupByWeek(daily){
       rate_total:rate('conn_total'), rate_sub:rate('conn_sub'), rate_ai:rate('conn_ai'),
       rate_3d:rate('conn_3d'), rate_broad:rate('conn_broad'), rate_video:rate('conn_video'),
     };
-  });
+  }).reverse(); // oldest first so weeks[weeks.length-1] = current
 }
 
 function groupByWeek58(daily){
+  const sorted = [...daily].filter(d=>d.uv).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted.length) return [];
+  const lastD = new Date(sorted[sorted.length-1].date+'T00:00:00');
+
   const map = {};
-  daily.filter(d=>d.uv).forEach(d => {
-    const wk = d.week_thu;
-    if(!map[wk]) map[wk] = {week:wk, days:[],
+  sorted.forEach(d => {
+    const diff = Math.round((lastD - new Date(d.date+'T00:00:00'))/86400000);
+    const idx = Math.floor(diff/7);
+    if(!map[idx]) map[idx] = {idx, days:[],
       _uv:0,_uv_app:0,_uv_mini:0,_vcuv:0,_conn:0,
       _retain_sum:0,_retain_n:0};
-    const w = map[wk];
+    const w = map[idx];
     w.days.push(d.date);
     w._uv      += d.uv||0;
     w._uv_app  += d.uv_app||0;
@@ -266,10 +282,12 @@ function groupByWeek58(daily){
     w._conn    += d.conn||0;
     if(d.retain_1d!=null){ w._retain_sum += d.retain_1d; w._retain_n++; }
   });
-  return Object.values(map).sort((a,b)=>a.week.localeCompare(b.week)).map(w=>{
+  return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w=>{
     const n = w.days.length;
     const avg = k => Math.round(w['_'+k]/n);
     const uv=avg('uv'), vcuv=avg('vcuv'), conn=avg('conn');
+    const ds = w.days.slice().sort();
+    w.week = ds[0]; w.weekEnd = ds[ds.length-1];
     return { ...w,
       uv, uv_app:avg('uv_app'), uv_mini:avg('uv_mini'),
       vcuv, conn,
@@ -277,17 +295,17 @@ function groupByWeek58(daily){
       conn_rate: vcuv ? +(conn/vcuv*100).toFixed(4) : null,
       retain_1d: w._retain_n ? +(w._retain_sum/w._retain_n*100).toFixed(2) : null,
     };
-  });
+  }).reverse();
 }
 
-function wLabel(thuStr, days){
-  // e.g. "04.10～04.15"
-  const d = new Date(thuStr+'T00:00:00');
-  const end = new Date(d); end.setDate(d.getDate()+6);
-  const f = x=>`${x.getMonth()+1}.${x.getDate()}`;
-  const actualEnd = days && days.length ? days[days.length-1] : null;
-  const endD = actualEnd ? new Date(actualEnd+'T00:00:00') : end;
-  return `${f(d)}～${f(endD)}`;
+function wLabel(weekStart, days){
+  // use actual date range from days array
+  const f = s => { const d=new Date(s+'T00:00:00'); return `${d.getMonth()+1}.${d.getDate()}`; };
+  if(days && days.length){
+    const ds = days.slice().sort();
+    return `${f(ds[0])}～${f(ds[ds.length-1])}`;
+  }
+  return weekStart||'';
 }
 
 // ── tab ──
