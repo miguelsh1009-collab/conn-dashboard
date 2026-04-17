@@ -379,8 +379,7 @@ function groupByWeek(daily){
 function groupByWeek58(daily){
   const sorted = [...daily].filter(d=>d.uv).sort((a,b)=>a.date.localeCompare(b.date));
   if(!sorted.length) return [];
-  const lastDate = sorted[sorted.length-1].date; // 最后一天不计入次日返回率
-  const lastD = new Date(lastDate+'T00:00:00');
+  const lastD = new Date(sorted[sorted.length-1].date+'T00:00:00');
 
   const map = {};
   sorted.forEach(d => {
@@ -396,8 +395,7 @@ function groupByWeek58(daily){
     w._uv_mini += d.uv_mini||0;
     w._vcuv    += d.vcuv||0;
     w._conn    += d.conn||0;
-    // 最后一天的次日返回率尚未完整，跳过
-    if(d.retain_1d!=null && d.date !== lastDate){ w._retain_sum += d.retain_1d; w._retain_n++; }
+    if(d.retain_1d!=null){ w._retain_sum += d.retain_1d; w._retain_n++; }
   });
   return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w=>{
     const n = w.days.length;
