@@ -3,51 +3,68 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>平台连接数据看板</title>
+<title>新房周数据看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
 <script src="https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
-  --bg:#0f1117; --card:#1a1d2e; --border:#2a2d3e; --text:#e2e8f0;
-  --muted:#94a3b8; --primary:#6366f1; --danger:#ef4444; --success:#22c55e;
-  --warn:#f59e0b; --tag:#1e293b;
+  --bg:#0d0f14; --card:#141720; --bg3:#1c2030;
+  --border:rgba(255,255,255,0.07); --text:#e8ecf0; --muted:#6b7585;
+  --accent:#4f8ef7; --primary:#4f8ef7;
+  --danger:#f87171; --success:#34d399; --warn:#fbbf24;
+  --font:'Noto Sans SC',sans-serif;
+  color-scheme: light dark;
+}
+@media(prefers-color-scheme:light){
+  :root{
+    --bg:#f5f7fa; --card:#ffffff; --bg3:#edf0f5;
+    --border:rgba(0,0,0,0.08); --text:#1a1d23; --muted:#8b95a3;
+    --accent:#2563eb; --primary:#2563eb;
+    --danger:#dc2626; --success:#059669; --warn:#d97706;
+  }
+  .cmp-table tr:hover td{background:rgba(0,0,0,0.025)!important}
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang SC',sans-serif;font-size:13px;min-height:100vh}
-.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:16px;height:48px;position:sticky;top:0;z-index:100}
-.topbar-title{font-size:15px;font-weight:600;color:#fff}
-.tabs{display:flex;gap:2px;padding:2px;background:var(--tag);border-radius:8px}
-.tab{padding:5px 20px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:13px;border:none;background:none}
-.tab.active{background:var(--primary);color:#fff}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.6;min-height:100vh}
+
+/* Topbar */
+.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:16px;height:52px;position:sticky;top:0;z-index:100}
+.topbar-title{font-size:15px;font-weight:500;letter-spacing:.03em}
+.tabs{display:flex;gap:2px;padding:2px;background:var(--bg3);border-radius:8px}
+.tab{padding:5px 18px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:13px;border:none;background:none;font-family:var(--font)}
+.tab.active{background:var(--accent);color:#fff}
 .updated{color:var(--muted);font-size:12px;margin-left:auto}
-.upload-btn{padding:5px 14px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;white-space:nowrap}
-.upload-btn:hover{opacity:.85}
+.upload-btn{padding:6px 16px;border-radius:6px;background:rgba(79,142,247,0.12);border:1px solid rgba(79,142,247,0.3);color:var(--accent);cursor:pointer;font-size:12px;white-space:nowrap;font-family:var(--font);transition:all .2s}
+.upload-btn:hover{background:rgba(79,142,247,0.22)}
 #fileInput{display:none}
-.upload-toast{position:fixed;bottom:24px;right:24px;background:#1a1d2e;border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--text);z-index:999;display:none;max-width:320px}
-.container{max-width:1400px;margin:0 auto;padding:16px 20px}
+.upload-toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--text);z-index:999;display:none;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.container{max-width:1400px;margin:0 auto;padding:20px 28px}
 .page{display:none}.page.active{display:block}
 
 /* Cards */
-.section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
 .section-hd{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.section-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.section-title{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 
 /* KPI */
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
-.kpi-label{color:var(--muted);font-size:12px;margin-bottom:4px}
-.kpi-val{font-size:22px;font-weight:700;color:#fff}
-.kpi-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent)}
+.kpi-label{color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
+.kpi-val{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.kpi-sub{font-size:12px;color:var(--muted);margin-top:4px}
 
 /* Week compare table */
 .cmp-table{width:100%;border-collapse:collapse}
-.cmp-table th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
-.cmp-table td{padding:10px 12px;border-bottom:1px solid rgba(42,45,62,.5);font-size:12px;white-space:nowrap}
+.cmp-table th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;letter-spacing:.04em}
+.cmp-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;white-space:nowrap}
 .cmp-table tr:last-child td{border-bottom:none}
-.cmp-table tr:hover td{background:rgba(99,102,241,.04)}
+.cmp-table tr:hover td{background:rgba(79,142,247,0.04)}
 .num{font-variant-numeric:tabular-nums}
 .up{color:var(--danger)}.dn{color:var(--success)}.flat{color:var(--muted)}
-.metric-name{font-weight:600;color:var(--text)}
+.metric-name{font-weight:500;color:var(--text)}
 .metric-sub{font-size:11px;color:var(--muted)}
 
 /* Chart */
@@ -56,31 +73,33 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
 
 /* Type toggles */
 .type-pills{display:flex;gap:6px;flex-wrap:wrap}
-.type-pill{padding:3px 10px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;transition:all .15s}
+.type-pill{padding:3px 10px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;transition:all .15s;font-family:var(--font)}
 .type-pill.on{color:#fff}
 
 /* Week nav */
 .week-nav{display:flex;gap:6px;flex-wrap:wrap}
-.week-btn{background:var(--tag);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px}
-.week-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.week-btn{background:var(--bg3);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font)}
+.week-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
-/* Device split chart */
+/* Chart row */
 .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:900px){.chart-row{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}}
-
-/* period note */
-.period-note{font-size:11px;color:var(--muted);padding:4px 10px;background:var(--tag);border-radius:6px}
+.period-note{font-size:11px;color:var(--muted);padding:4px 10px;background:var(--bg3);border-radius:6px}
 </style>
 </head>
 <body>
 <div class="topbar">
-  <span class="topbar-title">📊 平台连接数据看板</span>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="width:7px;height:7px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)"></div>
+    <span class="topbar-title">新房周数据看板</span>
+  </div>
   <div class="tabs">
     <button class="tab active" onclick="switchTab('ajk')">安居客 AJK</button>
     <button class="tab" onclick="switchTab('w58')">58同城</button>
     <button class="tab" onclick="switchTab('idle')">闲置投放</button>
   </div>
   <span class="updated" id="updatedText">加载中…</span>
+  <a href="https://miguelsh1009-collab.github.io/anjuke-data-dashboard/" target="_blank" style="padding:6px 14px;border-radius:6px;background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap">城市数据看板 ↗</a>
   <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传 xlsx</button>
   <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleUpload(event)">
 </div>
@@ -287,9 +306,9 @@ let chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
 let chartIdleCnt=null, chartIdleVcuv=null, chartIdleLead=null;
 
 // ── helpers ──
-function chartOpts(){ return { backgroundColor:'transparent', tooltip:{trigger:'axis',backgroundColor:'#1a1d2e',borderColor:'#2a2d3e',textStyle:{color:'#e2e8f0',fontSize:12}}, legend:{textStyle:{color:'#94a3b8'},top:0,type:'scroll'}, grid:{left:55,right:20,top:36,bottom:50} }; }
-function xAxis(data){ return {data, axisLabel:{color:'#94a3b8',fontSize:11,rotate:30}, axisLine:{lineStyle:{color:'#2a2d3e'}}}; }
-function yAxis(fmt){ return {axisLabel:{color:'#94a3b8',fontSize:11,formatter:fmt||null}, splitLine:{lineStyle:{color:'#2a2d3e'}}}; }
+function chartOpts(){ return { backgroundColor:'transparent', tooltip:{trigger:'axis',backgroundColor:'var(--card, #141720)',borderColor:'rgba(255,255,255,0.07)',textStyle:{color:'#e8ecf0',fontSize:12}}, legend:{textStyle:{color:'#6b7585'},top:0,type:'scroll'}, grid:{left:55,right:20,top:36,bottom:50} }; }
+function xAxis(data){ return {data, axisLabel:{color:'#6b7585',fontSize:11,rotate:30}, axisLine:{lineStyle:{color:'rgba(255,255,255,0.07)'}}}; }
+function yAxis(fmt){ return {axisLabel:{color:'#6b7585',fontSize:11,formatter:fmt||null}, splitLine:{lineStyle:{color:'rgba(255,255,255,0.07)'}}}; }
 function fmt(v,d=2){ return v==null?'--':Number(v).toLocaleString('zh-CN',{minimumFractionDigits:0,maximumFractionDigits:d}); }
 function fmtW(v){ return v==null?'--':(v/10000).toFixed(2)+'万'; }
 function fmtPct(v){ return v==null?'--':v.toFixed(2)+'%'; }
