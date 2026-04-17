@@ -78,6 +78,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
   <div class="tabs">
     <button class="tab active" onclick="switchTab('ajk')">安居客 AJK</button>
     <button class="tab" onclick="switchTab('w58')">58同城</button>
+    <button class="tab" onclick="switchTab('idle')">闲置投放</button>
   </div>
   <span class="updated" id="updatedText">加载中…</span>
   <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传 xlsx</button>
@@ -179,6 +180,49 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang 
   </div>
 </div>
 
+<!-- ══ 闲置投放 ══ -->
+<div class="page" id="page-idle">
+  <div class="kpi-row" id="idleKpi"></div>
+
+  <div class="section">
+    <div class="section-hd">
+      <span class="section-title">周对比</span>
+      <div class="week-nav" id="idleWeekNav"></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="cmp-table" id="idleCmpTable">
+        <thead><tr>
+          <th>指标</th>
+          <th id="thIdleCur">当前周</th>
+          <th id="thIdlePrev">上一周</th>
+          <th>变化</th>
+          <th>变化%</th>
+        </tr></thead>
+        <tbody id="idleCmpBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 楼盘数趋势 -->
+  <div class="section">
+    <div class="section-hd"><span class="section-title">在线楼盘数 & 投放成功盘 趋势（周）</span></div>
+    <div class="chart-area" id="idleCntChart"></div>
+  </div>
+
+  <div class="chart-row">
+    <!-- VCUV趋势 -->
+    <div class="section">
+      <div class="section-hd"><span class="section-title">VCUV 趋势（周）</span></div>
+      <div class="chart-area" id="idleVcuvChart"></div>
+    </div>
+    <!-- 线索趋势 -->
+    <div class="section">
+      <div class="section-hd"><span class="section-title">线索量趋势（周）</span></div>
+      <div class="chart-area" id="idleLeadChart"></div>
+    </div>
+  </div>
+</div>
+
 </div><!-- /container -->
 
 <script>
@@ -234,11 +278,13 @@ const CONN_TYPES = [
   {key:'rate_video',     label:'视频评测',       color:'#ef4444'},
 ];
 
-let rawAJK=[], rawW58=[];
-let ajkWeeks=[], w58Weeks=[];
-let selAjkWeek=0, selW58Week=0;
+let rawAJK=[], rawW58=[], rawIdle=[];
+let ajkWeeks=[], w58Weeks=[], idleWeeks=[];
+let selAjkWeek=0, selW58Week=0, selIdleWeek=0;
 let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
-let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null, chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
+let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
+let chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
+let chartIdleCnt=null, chartIdleVcuv=null, chartIdleLead=null;
 
 // ── helpers ──
 function chartOpts(){ return { backgroundColor:'transparent', tooltip:{trigger:'axis',backgroundColor:'#1a1d2e',borderColor:'#2a2d3e',textStyle:{color:'#e2e8f0',fontSize:12}}, legend:{textStyle:{color:'#94a3b8'},top:0,type:'scroll'}, grid:{left:55,right:20,top:36,bottom:50} }; }
@@ -360,10 +406,11 @@ function wLabel(weekStart, days){
 
 // ── tab ──
 function switchTab(name){
-  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['ajk','w58'][i]===name));
+  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['ajk','w58','idle'][i]===name));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
-  if(name==='w58') setTimeout(()=>renderW58(),60);
+  if(name==='w58')  setTimeout(()=>renderW58(),60);
+  if(name==='idle') setTimeout(()=>renderIdle(),60);
 }
 
 // ══ AJK ══
@@ -653,6 +700,183 @@ function renderW58Charts(){
   },true);
 }
 
+// ══ 闲置投放 ══
+function groupByWeekIdle(daily){
+  const sorted = [...daily].filter(d=>d.online_cnt).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted.length) return [];
+  const lastD = new Date(sorted[sorted.length-1].date+'T00:00:00');
+  const map = {};
+  sorted.forEach(d=>{
+    const diff = Math.round((lastD - new Date(d.date+'T00:00:00'))/86400000);
+    const idx = Math.floor(diff/7);
+    if(!map[idx]) map[idx]={idx,days:[],
+      _online_cnt:0,_online_vcuv:0,_lead_total:0,_unsold_cnt:0,
+      _placed_cnt:0,_placed_vcuv:0,_lead_adv:0,_lead_brk:0,_lead_placed:0};
+    const w=map[idx];
+    w.days.push(d.date);
+    ['online_cnt','online_vcuv','lead_total','unsold_cnt',
+     'placed_cnt','placed_vcuv','lead_adv','lead_brk','lead_placed'].forEach(k=>{
+      if(d[k]) w['_'+k]+=d[k];
+    });
+  });
+  return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w=>{
+    const n=w.days.length;
+    const avg=k=>Math.round(w['_'+k]/n);
+    const ds=w.days.slice().sort();
+    w.week=ds[0]; w.weekEnd=ds[ds.length-1];
+    const online_cnt=avg('online_cnt'), online_vcuv=avg('online_vcuv');
+    const unsold_cnt=avg('unsold_cnt'), placed_cnt=avg('placed_cnt');
+    const placed_vcuv=avg('placed_vcuv'), lead_total=avg('lead_total');
+    const lead_adv=avg('lead_adv'), lead_brk=avg('lead_brk'), lead_placed=avg('lead_placed');
+    const rate=k=>avg(k)>0 ? null : null; // placeholder
+    return {...w,
+      online_cnt, online_vcuv, lead_total, unsold_cnt,
+      placed_cnt, placed_vcuv, lead_adv, lead_brk, lead_placed,
+      placed_rate:  unsold_cnt ? +(placed_cnt/unsold_cnt*100).toFixed(4) : null,
+      placed_rate2: online_cnt ? +(placed_cnt/online_cnt*100).toFixed(4) : null,
+      placed_vcuv_rate: online_vcuv ? +(placed_vcuv/online_vcuv*100).toFixed(4) : null,
+      lead_conv:    placed_vcuv ? +(lead_placed/placed_vcuv*100).toFixed(4) : null,
+      lead_brk_rate:lead_total  ? +(lead_brk/lead_total*100).toFixed(4) : null,
+    };
+  });
+}
+
+function renderIdle(){
+  if(!rawIdle.length) return;
+  idleWeeks=groupByWeekIdle(rawIdle);
+  selIdleWeek=idleWeeks.length-1;
+  buildIdleWeekNav();
+  renderIdleKpi();
+  renderIdleCmp();
+  renderIdleCharts();
+}
+
+function buildIdleWeekNav(){
+  const nav=document.getElementById('idleWeekNav');
+  const start=Math.max(0,idleWeeks.length-8);
+  nav.innerHTML=idleWeeks.slice(start).map((w,i)=>{
+    const idx=start+i;
+    return `<button class="week-btn ${idx===selIdleWeek?'active':''}" onclick="selIdleWeek=${idx};buildIdleWeekNav();renderIdleKpi();renderIdleCmp()">${wLabel(w.week,w.days)}</button>`;
+  }).join('');
+}
+
+function renderIdleKpi(){
+  const cur=idleWeeks[selIdleWeek], prev=selIdleWeek>0?idleWeeks[selIdleWeek-1]:null;
+  const chg=(a,b,isRate)=>prev?`环比 <span class="${(a-b)>=0?'up':'dn'}">${(a-b)>=0?'+':''}${isRate?(a-b).toFixed(2)+'pp':((a-b)/Math.abs(b)*100).toFixed(1)+'%'}</span>`:'--';
+  const kpis=[
+    {label:'日均在线楼盘数',     val:fmt(cur.online_cnt,0),  sub:prev?chg(cur.online_cnt,prev.online_cnt,false):'--'},
+    {label:'投放成功盘/在线楼盘',val:fmtPct(cur.placed_rate2),sub:prev?chg(cur.placed_rate2,prev.placed_rate2,true):'--'},
+    {label:'投放盘VCUV占比',     val:fmtPct(cur.placed_vcuv_rate),sub:prev?chg(cur.placed_vcuv_rate,prev.placed_vcuv_rate,true):'--'},
+    {label:'经纪人线索/总线索',  val:fmtPct(cur.lead_brk_rate),sub:prev?chg(cur.lead_brk_rate,prev.lead_brk_rate,true):'--'},
+  ];
+  document.getElementById('idleKpi').innerHTML=kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
+}
+
+function renderIdleCmp(){
+  const cur=idleWeeks[selIdleWeek], prev=selIdleWeek>0?idleWeeks[selIdleWeek-1]:null;
+  document.getElementById('thIdleCur').textContent=wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
+  if(prev) document.getElementById('thIdlePrev').textContent=wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
+  const rows=[
+    {sep:true, label:'── 楼盘规模'},
+    {label:'在线楼盘数',          sub:'日均', key:'online_cnt',       fmt:v=>fmt(v,0)},
+    {label:'在线非售罄楼盘数',    sub:'日均', key:'unsold_cnt',       fmt:v=>fmt(v,0)},
+    {label:'投放成功盘数',        sub:'日均', key:'placed_cnt',       fmt:v=>fmt(v,0)},
+    {label:'投放成功盘/在线楼盘', sub:'率',   key:'placed_rate2',     fmt:v=>fmtPct(v), isRate:true},
+    {label:'投放成功盘/在线非售罄',sub:'率',  key:'placed_rate',      fmt:v=>fmtPct(v), isRate:true},
+    {sep:true, label:'── VCUV'},
+    {label:'在线盘总VCUV',        sub:'日均', key:'online_vcuv',      fmt:v=>fmtW(v)},
+    {label:'投放盘VCUV',          sub:'日均', key:'placed_vcuv',      fmt:v=>fmtW(v)},
+    {label:'投放盘VCUV占比',      sub:'率',   key:'placed_vcuv_rate', fmt:v=>fmtPct(v), isRate:true},
+    {sep:true, label:'── 线索'},
+    {label:'微聊+电话总线索',     sub:'日均', key:'lead_total',       fmt:v=>fmt(v,0)},
+    {label:'投放盘顾问线索',      sub:'日均', key:'lead_adv',         fmt:v=>fmt(v,0)},
+    {label:'投放盘经纪人线索',    sub:'日均', key:'lead_brk',         fmt:v=>fmt(v,0)},
+    {label:'经纪人线索/总线索',   sub:'率',   key:'lead_brk_rate',    fmt:v=>fmtPct(v), isRate:true},
+    {label:'投放盘线索/投放VCUV', sub:'转化率',key:'lead_conv',       fmt:v=>fmtPct(v), isRate:true},
+  ];
+  document.getElementById('idleCmpBody').innerHTML=rows.map(r=>{
+    if(r.sep) return `<tr><td colspan="5" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
+    const cv=cur[r.key], pv=prev?prev[r.key]:null;
+    const chgParts=prev?chgEl(cv,pv,!!r.isRate).split('|'):['--','--'];
+    return `<tr>
+      <td><span class="metric-name">${r.label}</span>${r.sub?`<br><span class="metric-sub">${r.sub}</span>`:''}</td>
+      <td class="num">${r.fmt(cv)}</td>
+      <td class="num">${prev?r.fmt(pv):'--'}</td>
+      <td class="num">${chgParts[0]}</td>
+      <td class="num">${chgParts[1]}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderIdleCharts(){
+  const weeks=idleWeeks.slice(-26);
+  const labels=weeks.map(w=>wLabel(w.week,w.days));
+
+  // 楼盘数 + 投放率
+  if(!chartIdleCnt) chartIdleCnt=echarts.init(document.getElementById('idleCntChart'));
+  chartIdleCnt.setOption({
+    ...chartOpts(),
+    tooltip: makeTip(()=>idleWeeks.slice(-26),
+      [{key:'online_cnt',isRate:false},{key:'placed_cnt',isRate:false},{key:'placed_rate2',isRate:true}],
+      (v,pi)=>pi<2?fmt(v,0):v.toFixed(2)+'%'),
+    legend:{data:['在线楼盘数','投放成功盘数','投放成功盘/在线楼盘(%)'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:65,right:60,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:[
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v>9999?(v/10000).toFixed(0)+'万':v},splitLine:{lineStyle:{color:'#2a2d3e'}}},
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
+    ],
+    series:[
+      {name:'在线楼盘数',   type:'bar', data:weeks.map(w=>w.online_cnt), itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'投放成功盘数', type:'line',smooth:true,data:weeks.map(w=>w.placed_cnt),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:0},
+      {name:'投放成功盘/在线楼盘(%)',type:'line',smooth:true,data:weeks.map(w=>w.placed_rate2!=null?+w.placed_rate2.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:5,yAxisIndex:1},
+    ]
+  },true);
+
+  // VCUV趋势
+  if(!chartIdleVcuv) chartIdleVcuv=echarts.init(document.getElementById('idleVcuvChart'));
+  chartIdleVcuv.setOption({
+    ...chartOpts(),
+    tooltip: makeTip(()=>idleWeeks.slice(-26),
+      [{key:'online_vcuv',isRate:false},{key:'placed_vcuv',isRate:false},{key:'placed_vcuv_rate',isRate:true}],
+      (v,pi)=>pi<2?(v/10000).toFixed(1)+'万':v.toFixed(2)+'%'),
+    legend:{data:['在线盘总VCUV','投放盘VCUV','投放VCUV占比(%)'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:60,right:55,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:[
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>(v/10000).toFixed(0)+'万'},splitLine:{lineStyle:{color:'#2a2d3e'}}},
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
+    ],
+    series:[
+      {name:'在线盘总VCUV',type:'bar', data:weeks.map(w=>w.online_vcuv),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'投放盘VCUV',  type:'line',smooth:true,data:weeks.map(w=>w.placed_vcuv),itemStyle:{color:'#a78bfa'},lineStyle:{color:'#a78bfa',width:2},symbolSize:5,yAxisIndex:0},
+      {name:'投放VCUV占比(%)',type:'line',smooth:true,data:weeks.map(w=>w.placed_vcuv_rate!=null?+w.placed_vcuv_rate.toFixed(2):null),itemStyle:{color:'#34d399'},lineStyle:{color:'#34d399',width:2},symbolSize:5,yAxisIndex:1},
+    ]
+  },true);
+
+  // 线索趋势
+  if(!chartIdleLead) chartIdleLead=echarts.init(document.getElementById('idleLeadChart'));
+  chartIdleLead.setOption({
+    ...chartOpts(),
+    tooltip: makeTip(()=>idleWeeks.slice(-26),
+      [{key:'lead_total',isRate:false},{key:'lead_adv',isRate:false},{key:'lead_brk',isRate:false},{key:'lead_brk_rate',isRate:true}],
+      (v,pi)=>pi<3?fmt(v,0):v.toFixed(2)+'%'),
+    legend:{data:['总线索','顾问线索','经纪人线索','经纪人线索/总线索(%)'],textStyle:{color:'#94a3b8'},top:0},
+    grid:{left:55,right:55,top:36,bottom:50},
+    xAxis:xAxis(labels),
+    yAxis:[
+      {axisLabel:{color:'#94a3b8',fontSize:11},splitLine:{lineStyle:{color:'#2a2d3e'}}},
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
+    ],
+    series:[
+      {name:'总线索',    type:'bar', data:weeks.map(w=>w.lead_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'顾问线索',  type:'line',smooth:true,data:weeks.map(w=>w.lead_adv), itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:4,yAxisIndex:0},
+      {name:'经纪人线索',type:'line',smooth:true,data:weeks.map(w=>w.lead_brk), itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:4,yAxisIndex:0},
+      {name:'经纪人线索/总线索(%)',type:'line',smooth:true,data:weeks.map(w=>w.lead_brk_rate!=null?+w.lead_brk_rate.toFixed(2):null),itemStyle:{color:'#ef4444'},lineStyle:{color:'#ef4444',width:2},symbolSize:5,yAxisIndex:1},
+    ]
+  },true);
+}
+
 // ── upload helpers ──
 function formatDate(v) {
   if (!v) return '';
@@ -756,18 +980,55 @@ async function handleUpload(event) {
       });
     }
 
+    // ── 闲置投放 sheet ──
+    const idleWs = wb.Sheets['闲置投放'];
+    const idleData = [];
+    if (idleWs) {
+      const idleRows = XLSX.utils.sheet_to_json(idleWs, {header:1, raw:true});
+      for (let i = 1; i < idleRows.length; i++) {
+        const r = idleRows[i];
+        const dateStr = formatDate(r[0]);
+        if (!dateStr || dateStr.length < 8) continue;
+        const num = v => (v == null || v === '' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
+        const online_cnt  = num(r[1]), online_vcuv = num(r[2]), lead_total = num(r[3]);
+        const unsold_cnt  = num(r[4]), placed_cnt  = num(r[5]), placed_vcuv= num(r[6]);
+        const lead_adv    = num(r[7]), lead_brk    = num(r[8]);
+        if (!online_cnt) continue;
+        const lead_placed = (lead_adv||0)+(lead_brk||0) || null;
+        idleData.push({
+          date: dateStr,
+          online_cnt:  Math.round(online_cnt),
+          online_vcuv: Math.round(online_vcuv||0),
+          lead_total:  Math.round(lead_total||0),
+          unsold_cnt:  Math.round(unsold_cnt||0),
+          placed_cnt:  Math.round(placed_cnt||0),
+          placed_vcuv: Math.round(placed_vcuv||0),
+          lead_adv:    Math.round(lead_adv||0),
+          lead_brk:    Math.round(lead_brk||0),
+          lead_placed: lead_placed ? Math.round(lead_placed) : null,
+          placed_rate:     (placed_cnt&&unsold_cnt)    ? +(placed_cnt/unsold_cnt*100).toFixed(4)    : null,
+          placed_rate2:    (placed_cnt&&online_cnt)    ? +(placed_cnt/online_cnt*100).toFixed(4)    : null,
+          placed_vcuv_rate:(placed_vcuv&&online_vcuv) ? +(placed_vcuv/online_vcuv*100).toFixed(4) : null,
+          lead_conv:       (lead_placed&&placed_vcuv) ? +(lead_placed/placed_vcuv*100).toFixed(4) : null,
+          lead_brk_rate:   (lead_brk&&lead_total)     ? +(lead_brk/lead_total*100).toFixed(4)     : null,
+        });
+      }
+    }
+
     // persist to localStorage
-    localStorage.setItem('conn_data', JSON.stringify({ajk:ajkData, w58:w58Data}));
-    rawAJK = ajkData; rawW58 = w58Data;
+    localStorage.setItem('conn_data', JSON.stringify({ajk:ajkData, w58:w58Data, idle:idleData}));
+    rawAJK = ajkData; rawW58 = w58Data; rawIdle = idleData;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate+'（本地）';
 
     // dispose old charts before re-render
-    [chartAjkTrend,chartAjkUv,chartAjkConn,chartW58Uv,chartW58Conn,chartW58Dev,chartW58Retain].forEach(c=>c&&c.dispose());
-    chartAjkTrend=chartAjkUv=chartAjkConn=chartW58Uv=chartW58Conn=chartW58Dev=chartW58Retain=null;
+    [chartAjkTrend,chartAjkUv,chartAjkConn,chartW58Uv,chartW58Conn,chartW58Dev,chartW58Retain,
+     chartIdleCnt,chartIdleVcuv,chartIdleLead].forEach(c=>c&&c.dispose());
+    chartAjkTrend=chartAjkUv=chartAjkConn=chartW58Uv=chartW58Conn=chartW58Dev=chartW58Retain=
+    chartIdleCnt=chartIdleVcuv=chartIdleLead=null;
 
     renderAjk();
-    showToast(`解析完成：AJK ${ajkData.length} 天，58 ${w58Data.length} 天`, false);
+    showToast(`解析完成：AJK ${ajkData.length}天，58 ${w58Data.length}天，闲置 ${idleData.length}天`, false);
   } catch(e) {
     console.error(e);
     showToast('解析失败：'+e.message, true);
@@ -783,7 +1044,7 @@ async function loadData(){
     try {
       const d = JSON.parse(cached);
       if (d.ajk && d.ajk.length) {
-        rawAJK = d.ajk; rawW58 = d.w58;
+        rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
         const lastDate = rawAJK[rawAJK.length-1]?.date || '--';
         document.getElementById('updatedText').textContent = '数据至：'+lastDate+'（本地）';
         renderAjk();
@@ -795,8 +1056,7 @@ async function loadData(){
   try{
     const res = await fetch('./data/data.json?t='+Date.now());
     const d = await res.json();
-    rawAJK = d.ajk;
-    rawW58 = d.w58;
+    rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
     const lastDate = rawAJK[rawAJK.length-1].date;
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
     renderAjk();
