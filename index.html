@@ -884,7 +884,12 @@ function handleIdleCsvUpload(e){
       for(let i=hIdx+1;i<lines.length;i++){
         const cols=parseIdleCsvLine(lines[i]);
         if(cols.length<10) continue;
-        const date=(cols[0]||'').trim();
+        let date=(cols[0]||'').trim();
+        // 兼容 YYYY/M/D 和 YYYY-MM-DD 两种格式
+        if(/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(date)){
+          const [y,m,d]=date.split('/');
+          date=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+        }
         if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
         const city=(cols[1]||'').trim();
         if(!city) continue;
