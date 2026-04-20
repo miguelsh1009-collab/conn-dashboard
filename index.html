@@ -909,13 +909,23 @@ function handleIdleCsvUpload(e){
 }
 
 function buildIdleCityFilter(){
+  const isAdmin=!!localStorage.getItem('gh_token');
   const cities=[...new Set(rawIdle.map(d=>d.city).filter(Boolean))].sort();
   const sel=document.getElementById('idleCitySelect');
-  sel.innerHTML='<option value="城市汇总">城市汇总</option>'+cities.map(c=>`<option value="${c}"${c===idleSelCity?' selected':''}>${c}</option>`).join('');
-  sel.value=idleSelCity;
-  // 上传入口仅有 token（管理员）可见
-  document.getElementById('idleCsvUploadBtn').style.display=localStorage.getItem('gh_token')?'inline-block':'none';
-  buildIdleTop5();
+  // 非管理员只有城市汇总选项，不显示城市明细
+  if(isAdmin){
+    sel.innerHTML='<option value="城市汇总">城市汇总</option>'+cities.map(c=>`<option value="${c}"${c===idleSelCity?' selected':''}>${c}</option>`).join('');
+    sel.style.display='';
+  } else {
+    sel.innerHTML='<option value="城市汇总">城市汇总</option>';
+    sel.style.display='none'; // 只有一个选项时直接隐藏下拉
+  }
+  sel.value='城市汇总';
+  // 上传入口仅管理员可见
+  document.getElementById('idleCsvUploadBtn').style.display=isAdmin?'inline-block':'none';
+  // TOP5 仅管理员可见
+  document.getElementById('idleTop5Row').style.display=isAdmin?'':'none';
+  if(isAdmin) buildIdleTop5();
 }
 
 function buildIdleTop5(){
