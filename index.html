@@ -231,6 +231,11 @@ function checkPw(){
 
 <!-- ══ 闲置投放 ══ -->
 <div class="page" id="page-idle">
+  <!-- 城市筛选栏 -->
+  <div id="idleCityBar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
+    <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
+    <div id="idleCityBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  </div>
   <div class="kpi-row" id="idleKpi"></div>
 
   <div class="section">
@@ -330,6 +335,7 @@ const CONN_TYPES = [
 let rawAJK=[], rawW58=[], rawIdle=[];
 let ajkWeeks=[], w58Weeks=[], idleWeeks=[];
 let selAjkWeek=0, selW58Week=0, selIdleWeek=0;
+let idleSelCity='全国';
 let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
 let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
 let chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
@@ -790,9 +796,35 @@ function groupByWeekIdle(daily){
   });
 }
 
+function buildIdleCityFilter(){
+  const cities = [...new Set(rawIdle.map(d=>d.city).filter(Boolean))].sort();
+  const wrap = document.getElementById('idleCityBtns');
+  const all = ['全国', ...cities];
+  wrap.innerHTML = all.map(c =>
+    `<button onclick="selectIdleCity('${c}')" id="idleCityBtn_${c.replace(/\s/g,'_')}"
+      style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:${c===idleSelCity?'var(--accent)':'var(--bg)'};
+      color:${c===idleSelCity?'#fff':'var(--muted)'};font-size:12px;cursor:pointer;font-family:var(--font);white-space:nowrap">${c}</button>`
+  ).join('');
+}
+
+function selectIdleCity(city){
+  idleSelCity=city;
+  buildIdleCityFilter();
+  const filtered = city==='全国' ? rawIdle : rawIdle.filter(d=>d.city===city);
+  idleWeeks=groupByWeekIdle(filtered);
+  selIdleWeek=idleWeeks.length-1;
+  buildIdleWeekNav();
+  renderIdleKpi();
+  renderIdleCmp();
+  renderIdleCharts();
+}
+
 function renderIdle(){
   if(!rawIdle.length) return;
-  idleWeeks=groupByWeekIdle(rawIdle);
+  idleSelCity='全国';
+  buildIdleCityFilter();
+  const filtered = rawIdle; // 默认全国
+  idleWeeks=groupByWeekIdle(filtered);
   selIdleWeek=idleWeeks.length-1;
   buildIdleWeekNav();
   renderIdleKpi();
@@ -1034,18 +1066,23 @@ async function handleUpload(event) {
     const idleData = [];
     if (idleWs) {
       const idleRows = XLSX.utils.sheet_to_json(idleWs, {header:1, raw:true});
+      // 检测是否有城市列：若第2列（col 1）是字符串则为城市名
+      const hasCityCol = idleRows.length > 1 && typeof idleRows[1][1] === 'string' && isNaN(+idleRows[1][1]);
+      const o = hasCityCol ? 1 : 0; // 列偏移
       for (let i = 1; i < idleRows.length; i++) {
         const r = idleRows[i];
         const dateStr = formatDate(r[0]);
         if (!dateStr || dateStr.length < 8) continue;
+        const city = hasCityCol ? (r[1]||'').trim() : null;
         const num = v => (v == null || v === '' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
-        const online_cnt  = num(r[1]), online_vcuv = num(r[2]), lead_total = num(r[3]);
-        const unsold_cnt  = num(r[4]), placed_cnt  = num(r[5]), placed_vcuv= num(r[6]);
-        const lead_adv    = num(r[7]), lead_brk    = num(r[8]);
+        const online_cnt  = num(r[1+o]), online_vcuv = num(r[2+o]), lead_total = num(r[3+o]);
+        const unsold_cnt  = num(r[4+o]), placed_cnt  = num(r[5+o]), placed_vcuv= num(r[6+o]);
+        const lead_adv    = num(r[7+o]), lead_brk    = num(r[8+o]);
         if (!online_cnt) continue;
         const lead_placed = (lead_adv||0)+(lead_brk||0) || null;
         idleData.push({
           date: dateStr,
+          ...(city ? {city} : {}),
           online_cnt:  Math.round(online_cnt),
           online_vcuv: Math.round(online_vcuv||0),
           lead_total:  Math.round(lead_total||0),
