@@ -780,15 +780,17 @@ function groupByWeekIdle(daily){
   });
   return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w=>{
     const ds=w.days.slice().sort();
-    const n=[...new Set(ds)].length; // 按唯一日期数算日均，城市数据每天多行不重复计
-    const avg=k=>Math.round(w['_'+k]/n);
+    const uniqueDays=[...new Set(ds)];
+    const n=uniqueDays.length; // 唯一日期数，用于流量指标日均
+    const avg=k=>Math.round(w['_'+k]/n);   // 流量指标：日均
+    const tot=k=>Math.round(w['_'+k]/n);   // 库存指标：各城市日均加总（=全国总数）
     w.week=ds[0]; w.weekEnd=ds[ds.length-1];
-    w.days=[...new Set(ds)]; // 去重，避免显示"532天"
-    const online_cnt=avg('online_cnt'), online_vcuv=avg('online_vcuv');
-    const unsold_cnt=avg('unsold_cnt'), placed_cnt=avg('placed_cnt');
+    w.days=uniqueDays;
+    // 库存型（在线楼盘数/投放成功盘）取各城市之和（日均加总）
+    const online_cnt=tot('online_cnt'), online_vcuv=avg('online_vcuv');
+    const unsold_cnt=tot('unsold_cnt'), placed_cnt=tot('placed_cnt');
     const placed_vcuv=avg('placed_vcuv'), lead_total=avg('lead_total');
     const lead_adv=avg('lead_adv'), lead_brk=avg('lead_brk'), lead_placed=avg('lead_placed');
-    const rate=k=>avg(k)>0 ? null : null; // placeholder
     return {...w,
       online_cnt, online_vcuv, lead_total, unsold_cnt,
       placed_cnt, placed_vcuv, lead_adv, lead_brk, lead_placed,
@@ -913,7 +915,7 @@ function renderIdleKpi(){
   const cur=idleWeeks[selIdleWeek], prev=selIdleWeek>0?idleWeeks[selIdleWeek-1]:null;
   const chg=(a,b,isRate)=>prev?`环比 <span class="${(a-b)>=0?'up':'dn'}">${(a-b)>=0?'+':''}${isRate?(a-b).toFixed(2)+'pp':((a-b)/Math.abs(b)*100).toFixed(1)+'%'}</span>`:'--';
   const kpis=[
-    {label:'日均在线楼盘数',     val:fmt(cur.online_cnt,0),  sub:prev?chg(cur.online_cnt,prev.online_cnt,false):'--'},
+    {label:'在线楼盘总数',       val:fmt(cur.online_cnt,0),  sub:prev?chg(cur.online_cnt,prev.online_cnt,false):'--'},
     {label:'投放成功盘/在线楼盘',val:fmtPct(cur.placed_rate2),sub:prev?chg(cur.placed_rate2,prev.placed_rate2,true):'--'},
     {label:'投放盘VCUV占比',     val:fmtPct(cur.placed_vcuv_rate),sub:prev?chg(cur.placed_vcuv_rate,prev.placed_vcuv_rate,true):'--'},
     {label:'经纪人线索/总线索',  val:fmtPct(cur.lead_brk_rate),sub:prev?chg(cur.lead_brk_rate,prev.lead_brk_rate,true):'--'},
@@ -927,9 +929,9 @@ function renderIdleCmp(){
   if(prev) document.getElementById('thIdlePrev').textContent=wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
   const rows=[
     {sep:true, label:'── 楼盘规模'},
-    {label:'在线楼盘数',          sub:'日均', key:'online_cnt',       fmt:v=>fmt(v,0)},
-    {label:'在线非售罄楼盘数',    sub:'日均', key:'unsold_cnt',       fmt:v=>fmt(v,0)},
-    {label:'投放成功盘数',        sub:'日均', key:'placed_cnt',       fmt:v=>fmt(v,0)},
+    {label:'在线楼盘总数',         sub:'城市加总', key:'online_cnt',   fmt:v=>fmt(v,0)},
+    {label:'在线非售罄楼盘数',    sub:'城市加总', key:'unsold_cnt',   fmt:v=>fmt(v,0)},
+    {label:'投放成功盘数',        sub:'城市加总', key:'placed_cnt',   fmt:v=>fmt(v,0)},
     {label:'投放成功盘/在线楼盘', sub:'率',   key:'placed_rate2',     fmt:v=>fmtPct(v), isRate:true},
     {label:'投放成功盘/在线非售罄',sub:'率',  key:'placed_rate',      fmt:v=>fmtPct(v), isRate:true},
     {sep:true, label:'── VCUV'},
