@@ -232,13 +232,22 @@ function checkPw(){
 <!-- ══ 闲置投放 ══ -->
 <div class="page" id="page-idle">
   <!-- 城市筛选栏 -->
-  <div id="idleCityBar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
-    <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
-    <div id="idleCityBtns" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
-    <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font)">
-      📂 上传城市CSV
-      <input type="file" accept=".csv" style="display:none" onchange="handleIdleCsvUpload(event)">
-    </label>
+  <div style="margin-bottom:16px;padding:12px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
+      <select id="idleCitySelect" onchange="selectIdleCity(this.value)"
+        style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:var(--font);cursor:pointer;min-width:120px">
+        <option value="全国">全国</option>
+      </select>
+      <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);margin-left:auto">
+        📂 上传城市CSV
+        <input type="file" accept=".csv" style="display:none" onchange="handleIdleCsvUpload(event)">
+      </label>
+    </div>
+    <div id="idleTop5Row" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted);white-space:nowrap">投放率TOP5：</span>
+      <div id="idleTop5Btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
   </div>
   <div class="kpi-row" id="idleKpi"></div>
 
@@ -867,19 +876,47 @@ function handleIdleCsvUpload(e){
 }
 
 function buildIdleCityFilter(){
-  const cities = [...new Set(rawIdle.map(d=>d.city).filter(Boolean))].sort();
-  const wrap = document.getElementById('idleCityBtns');
-  const all = ['全国', ...cities];
-  wrap.innerHTML = all.map(c =>
-    `<button onclick="selectIdleCity('${c}')" id="idleCityBtn_${c.replace(/\s/g,'_')}"
-      style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:${c===idleSelCity?'var(--accent)':'var(--bg)'};
-      color:${c===idleSelCity?'#fff':'var(--muted)'};font-size:12px;cursor:pointer;font-family:var(--font);white-space:nowrap">${c}</button>`
+  const cities=[...new Set(rawIdle.map(d=>d.city).filter(Boolean))].sort();
+  const sel=document.getElementById('idleCitySelect');
+  sel.innerHTML='<option value="全国">全国</option>'+cities.map(c=>`<option value="${c}"${c===idleSelCity?' selected':''}>${c}</option>`).join('');
+  sel.value=idleSelCity;
+  buildIdleTop5();
+}
+
+function buildIdleTop5(){
+  const row=document.getElementById('idleTop5Row');
+  const hasCities=[...new Set(rawIdle.map(d=>d.city).filter(Boolean))].length>0;
+  if(!hasCities){row.style.display='none';return;}
+  // 取最近一周日期范围
+  const allWeeks=groupByWeekIdle(rawIdle);
+  if(!allWeeks.length){row.style.display='none';return;}
+  const latestWeek=allWeeks[allWeeks.length-1];
+  const weekDates=new Set(latestWeek.days);
+  // 按城市聚合最近一周
+  const cityMap={};
+  rawIdle.filter(d=>weekDates.has(d.date)).forEach(d=>{
+    if(!d.city) return;
+    if(!cityMap[d.city]) cityMap[d.city]={placed_cnt:0,online_cnt:0};
+    cityMap[d.city].placed_cnt+=d.placed_cnt||0;
+    cityMap[d.city].online_cnt+=d.online_cnt||0;
+  });
+  const top5=Object.entries(cityMap)
+    .map(([city,v])=>({city,rate:v.online_cnt?v.placed_cnt/v.online_cnt*100:0}))
+    .sort((a,b)=>b.rate-a.rate).slice(0,5);
+  row.style.display='flex';
+  document.getElementById('idleTop5Btns').innerHTML=top5.map(({city,rate})=>
+    `<button onclick="selectIdleCity('${city}')"
+      style="padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:${city===idleSelCity?'var(--accent)':'var(--bg)'};
+      color:${city===idleSelCity?'#fff':'var(--muted)'};font-size:12px;cursor:pointer;font-family:var(--font);white-space:nowrap">
+      ${city} <span style="font-size:11px;opacity:0.75">${rate.toFixed(1)}%</span>
+    </button>`
   ).join('');
 }
 
 function selectIdleCity(city){
   idleSelCity=city;
-  buildIdleCityFilter();
+  document.getElementById('idleCitySelect').value=city;
+  buildIdleTop5(); // 更新TOP5按钮高亮
   const filtered = city==='全国' ? rawIdle : rawIdle.filter(d=>d.city===city);
   idleWeeks=groupByWeekIdle(filtered);
   selIdleWeek=idleWeeks.length-1;
