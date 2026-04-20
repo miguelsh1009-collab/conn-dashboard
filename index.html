@@ -1270,50 +1270,10 @@ async function handleUpload(event) {
       });
     }
 
-    // ── 闲置投放 sheet ──
-    const idleWs = wb.Sheets['闲置投放'];
-    const idleData = [];
-    if (idleWs) {
-      const idleRows = XLSX.utils.sheet_to_json(idleWs, {header:1, raw:true});
-      // 检测是否有城市列：若第2列（col 1）是字符串则为城市名
-      const hasCityCol = idleRows.length > 1 && typeof idleRows[1][1] === 'string' && isNaN(+idleRows[1][1]);
-      const o = hasCityCol ? 1 : 0; // 列偏移
-      for (let i = 1; i < idleRows.length; i++) {
-        const r = idleRows[i];
-        const dateStr = formatDate(r[0]);
-        if (!dateStr || dateStr.length < 8) continue;
-        const city = hasCityCol ? (r[1]||'').trim() : null;
-        const num = v => (v == null || v === '' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
-        const online_cnt  = num(r[1+o]), online_vcuv = num(r[2+o]), lead_total = num(r[3+o]);
-        const unsold_cnt  = num(r[4+o]), placed_cnt  = num(r[5+o]), placed_vcuv= num(r[6+o]);
-        const lead_adv    = num(r[7+o]), lead_brk    = num(r[8+o]);
-        if (!online_cnt) continue;
-        const lead_placed = (lead_adv||0)+(lead_brk||0) || null;
-        idleData.push({
-          date: dateStr,
-          ...(city ? {city} : {}),
-          online_cnt:  Math.round(online_cnt),
-          online_vcuv: Math.round(online_vcuv||0),
-          lead_total:  Math.round(lead_total||0),
-          unsold_cnt:  Math.round(unsold_cnt||0),
-          placed_cnt:  Math.round(placed_cnt||0),
-          placed_vcuv: Math.round(placed_vcuv||0),
-          lead_adv:    Math.round(lead_adv||0),
-          lead_brk:    Math.round(lead_brk||0),
-          lead_placed: lead_placed ? Math.round(lead_placed) : null,
-          placed_rate:     (placed_cnt&&unsold_cnt)    ? +(placed_cnt/unsold_cnt*100).toFixed(4)    : null,
-          placed_rate2:    (placed_cnt&&online_cnt)    ? +(placed_cnt/online_cnt*100).toFixed(4)    : null,
-          placed_vcuv_rate:(placed_vcuv&&online_vcuv) ? +(placed_vcuv/online_vcuv*100).toFixed(4) : null,
-          lead_conv:       (lead_placed&&placed_vcuv) ? +(lead_placed/placed_vcuv*100).toFixed(4) : null,
-          lead_brk_rate:   (lead_brk&&lead_total)     ? +(lead_brk/lead_total*100).toFixed(4)     : null,
-        });
-      }
-    }
-
-    // persist to localStorage + push to GitHub
-    const saveData={ajk:ajkData, w58:w58Data, idle:idleData};
+    // persist to localStorage + push to GitHub（闲置投放数据独立上传，不从xlsx读取）
+    const saveData={ajk:ajkData, w58:w58Data, idle:rawIdle};
     localStorage.setItem('conn_data', JSON.stringify(saveData));
-    rawAJK = ajkData; rawW58 = w58Data; rawIdle = idleData;
+    rawAJK = ajkData; rawW58 = w58Data;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
 
@@ -1324,7 +1284,7 @@ async function handleUpload(event) {
     chartIdleCnt=chartIdleVcuv=chartIdleLead=null;
 
     renderAjk();
-    showToast(`解析完成：AJK ${ajkData.length}天，58 ${w58Data.length}天，闲置 ${idleData.length}天`, false);
+    showToast(`解析完成：AJK ${ajkData.length}天，58 ${w58Data.length}天`, false);
     pushToGitHub(saveData);
   } catch(e) {
     console.error(e);
