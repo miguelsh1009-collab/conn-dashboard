@@ -1068,7 +1068,7 @@ async function handleUpload(event) {
     localStorage.setItem('conn_data', JSON.stringify({ajk:ajkData, w58:w58Data, idle:idleData}));
     rawAJK = ajkData; rawW58 = w58Data; rawIdle = idleData;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
-    document.getElementById('updatedText').textContent = '数据至：'+lastDate+'（本地）';
+    document.getElementById('updatedText').textContent = '数据至：'+lastDate ';
 
     // dispose old charts before re-render
     [chartAjkTrend,chartAjkUv,chartAjkConn,chartW58Uv,chartW58Conn,chartW58Dev,chartW58Retain,
@@ -1095,7 +1095,7 @@ async function loadData(){
       if (d.ajk && d.ajk.length) {
         rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
         const lastDate = rawAJK[rawAJK.length-1]?.date || '--';
-        document.getElementById('updatedText').textContent = '数据至：'+lastDate+'（本地）';
+        document.getElementById('updatedText').textContent = '数据至：'+lastDate';
         renderAjk();
         return;
       }
