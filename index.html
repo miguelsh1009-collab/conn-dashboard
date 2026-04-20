@@ -779,10 +779,11 @@ function groupByWeekIdle(daily){
     });
   });
   return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w=>{
-    const n=w.days.length;
-    const avg=k=>Math.round(w['_'+k]/n);
     const ds=w.days.slice().sort();
+    const n=[...new Set(ds)].length; // 按唯一日期数算日均，城市数据每天多行不重复计
+    const avg=k=>Math.round(w['_'+k]/n);
     w.week=ds[0]; w.weekEnd=ds[ds.length-1];
+    w.days=[...new Set(ds)]; // 去重，避免显示"532天"
     const online_cnt=avg('online_cnt'), online_vcuv=avg('online_vcuv');
     const unsold_cnt=avg('unsold_cnt'), placed_cnt=avg('placed_cnt');
     const placed_vcuv=avg('placed_vcuv'), lead_total=avg('lead_total');
