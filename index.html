@@ -276,9 +276,19 @@ function checkPw(){
         <input type="file" accept=".csv" style="display:none" onchange="handleIdleCsvUpload(event)">
       </label>
     </div>
-    <div id="idleTop5Row" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
-      <span style="font-size:12px;color:var(--muted);white-space:nowrap">投放率TOP5：</span>
-      <div id="idleTop5Btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div id="idleTop5Row" style="display:none;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:130px">投放率TOP5：</span>
+        <div id="idleTop5Btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:130px">投放盘VCUV占比TOP5：</span>
+        <div id="idleTop5VcuvBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:130px">经纪人线索占比TOP5：</span>
+        <div id="idleTop5BrkBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
     </div>
   </div>
   <div class="kpi-row" id="idleKpi"></div>
@@ -923,30 +933,36 @@ function buildIdleTop5(){
   const row=document.getElementById('idleTop5Row');
   const hasCities=[...new Set(rawIdle.map(d=>d.city).filter(Boolean))].length>0;
   if(!hasCities){row.style.display='none';return;}
-  // 取最近一周日期范围
   const allWeeks=groupByWeekIdle(rawIdle);
   if(!allWeeks.length){row.style.display='none';return;}
-  const latestWeek=allWeeks[allWeeks.length-1];
-  const weekDates=new Set(latestWeek.days);
+  const weekDates=new Set(allWeeks[allWeeks.length-1].days);
   // 按城市聚合最近一周
   const cityMap={};
   rawIdle.filter(d=>weekDates.has(d.date)).forEach(d=>{
     if(!d.city) return;
-    if(!cityMap[d.city]) cityMap[d.city]={placed_cnt:0,online_cnt:0};
-    cityMap[d.city].placed_cnt+=d.placed_cnt||0;
-    cityMap[d.city].online_cnt+=d.online_cnt||0;
+    if(!cityMap[d.city]) cityMap[d.city]={placed_cnt:0,online_cnt:0,placed_vcuv:0,online_vcuv:0,lead_brk:0,lead_total:0};
+    const m=cityMap[d.city];
+    m.placed_cnt+=d.placed_cnt||0; m.online_cnt+=d.online_cnt||0;
+    m.placed_vcuv+=d.placed_vcuv||0; m.online_vcuv+=d.online_vcuv||0;
+    m.lead_brk+=d.lead_brk||0; m.lead_total+=d.lead_total||0;
   });
-  const top5=Object.entries(cityMap)
-    .map(([city,v])=>({city,rate:v.online_cnt?v.placed_cnt/v.online_cnt*100:0}))
-    .sort((a,b)=>b.rate-a.rate).slice(0,5);
-  row.style.display='flex';
-  document.getElementById('idleTop5Btns').innerHTML=top5.map(({city,rate})=>
-    `<button onclick="selectIdleCity('${city}')"
+  const cities=Object.entries(cityMap).map(([city,v])=>({
+    city,
+    placed_rate: v.online_cnt ? v.placed_cnt/v.online_cnt*100 : 0,
+    vcuv_rate:   v.online_vcuv ? v.placed_vcuv/v.online_vcuv*100 : 0,
+    brk_rate:    v.lead_total ? v.lead_brk/v.lead_total*100 : 0,
+  }));
+  const mkBtns=(sorted,rateKey)=>sorted.slice(0,5).map(({city,placed_rate,vcuv_rate,brk_rate})=>{
+    const rate=rateKey==='placed_rate'?placed_rate:rateKey==='vcuv_rate'?vcuv_rate:brk_rate;
+    return `<button onclick="selectIdleCity('${city}')"
       style="padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:${city===idleSelCity?'var(--accent)':'var(--bg)'};
       color:${city===idleSelCity?'#fff':'var(--muted)'};font-size:12px;cursor:pointer;font-family:var(--font);white-space:nowrap">
-      ${city} <span style="font-size:11px;opacity:0.75">${rate.toFixed(1)}%</span>
-    </button>`
-  ).join('');
+      ${city} <span style="font-size:11px;opacity:0.75">${rate.toFixed(1)}%</span></button>`;
+  }).join('');
+  row.style.display='flex';
+  document.getElementById('idleTop5Btns').innerHTML=mkBtns([...cities].sort((a,b)=>b.placed_rate-a.placed_rate),'placed_rate');
+  document.getElementById('idleTop5VcuvBtns').innerHTML=mkBtns([...cities].sort((a,b)=>b.vcuv_rate-a.vcuv_rate),'vcuv_rate');
+  document.getElementById('idleTop5BrkBtns').innerHTML=mkBtns([...cities].sort((a,b)=>b.brk_rate-a.brk_rate),'brk_rate');
 }
 
 function selectIdleCity(city){
