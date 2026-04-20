@@ -234,7 +234,11 @@ function checkPw(){
   <!-- 城市筛选栏 -->
   <div id="idleCityBar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
     <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
-    <div id="idleCityBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div id="idleCityBtns" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
+    <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font)">
+      📂 上传城市CSV
+      <input type="file" accept=".csv" style="display:none" onchange="handleIdleCsvUpload(event)">
+    </label>
   </div>
   <div class="kpi-row" id="idleKpi"></div>
 
@@ -794,6 +798,69 @@ function groupByWeekIdle(daily){
       lead_brk_rate:lead_total  ? +(lead_brk/lead_total*100).toFixed(4) : null,
     };
   });
+}
+
+function parseIdleCsvLine(line){
+  const res=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===','&&!inQ){res.push(cur);cur='';}
+    else cur+=c;
+  }
+  res.push(cur);
+  return res;
+}
+
+function handleIdleCsvUpload(e){
+  const file=e.target.files[0]; if(!file) return;
+  e.target.value='';
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const bytes=new Uint8Array(ev.target.result);
+      let text;
+      try{text=new TextDecoder('gbk').decode(bytes);}catch(_){text=new TextDecoder('utf-8').decode(bytes);}
+      const lines=text.split('\n');
+      // 找表头行（含"日期"和"城市"）
+      const hIdx=lines.findIndex(l=>l.includes('日期')&&l.includes('城市'));
+      if(hIdx<0){showToast('未找到表头（需含日期、城市列）',true);return;}
+      const num=v=>{const n=parseFloat((v||'').replace(/,/g,''));return isNaN(n)?0:n;};
+      const map={};
+      for(let i=hIdx+1;i<lines.length;i++){
+        const cols=parseIdleCsvLine(lines[i]);
+        if(cols.length<10) continue;
+        const date=(cols[0]||'').trim();
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        const city=(cols[1]||'').trim();
+        if(!city) continue;
+        const key=date+'|'+city;
+        if(!map[key]) map[key]={date,city,online_cnt:0,online_vcuv:0,lead_total:0,unsold_cnt:0,placed_cnt:0,placed_vcuv:0,lead_placed:0,lead_brk:0};
+        const r=map[key];
+        // 列映射：3=在线楼盘数 4=在线VCUV 5=微聊+电话线索 6=非售罄盘 7=投放成功盘 8=投放盘VCUV 9=投放盘线索 10=经纪人线索
+        r.online_cnt  +=num(cols[3]); r.online_vcuv +=num(cols[4]);
+        r.lead_total  +=num(cols[5]); r.unsold_cnt  +=num(cols[6]);
+        r.placed_cnt  +=num(cols[7]); r.placed_vcuv +=num(cols[8]);
+        r.lead_placed +=num(cols[9]); r.lead_brk    +=num(cols[10]);
+      }
+      rawIdle=Object.values(map).map(r=>({
+        date:r.date, city:r.city,
+        online_cnt:Math.round(r.online_cnt), online_vcuv:Math.round(r.online_vcuv),
+        lead_total:Math.round(r.lead_total), unsold_cnt:Math.round(r.unsold_cnt),
+        placed_cnt:Math.round(r.placed_cnt), placed_vcuv:Math.round(r.placed_vcuv),
+        lead_placed:Math.round(r.lead_placed), lead_brk:Math.round(r.lead_brk),
+        lead_adv:Math.max(0,Math.round(r.lead_placed-r.lead_brk)),
+      }));
+      // 持久化到 localStorage
+      const saved=JSON.parse(localStorage.getItem('conn_data')||'{}');
+      saved.idle=rawIdle;
+      localStorage.setItem('conn_data',JSON.stringify(saved));
+      const cityCount=[...new Set(rawIdle.map(d=>d.city))].length;
+      showToast(`城市数据解析完成：${cityCount}个城市，${rawIdle.length}条记录`,false);
+      renderIdle();
+    }catch(err){showToast('解析失败：'+err.message,true);}
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function buildIdleCityFilter(){
