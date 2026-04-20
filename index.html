@@ -979,6 +979,7 @@ function selectIdleCity(city){
 }
 
 function renderIdle(){
+  buildIdleCityFilter(); // 始终渲染城市筛选栏（含上传按钮），不依赖数据是否存在
   if(!rawIdle.length) return;
   idleSelCity='城市汇总';
   buildIdleCityFilter();
