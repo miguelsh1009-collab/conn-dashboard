@@ -269,9 +269,9 @@ function checkPw(){
       <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
       <select id="idleCitySelect" onchange="selectIdleCity(this.value)"
         style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:var(--font);cursor:pointer;min-width:120px">
-        <option value="总计">总计</option>
+        <option value="城市汇总">城市汇总</option>
       </select>
-      <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);margin-left:auto">
+      <label id="idleCsvUploadBtn" style="display:none;padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);margin-left:auto">
         📂 上传城市CSV
         <input type="file" accept=".csv" style="display:none" onchange="handleIdleCsvUpload(event)">
       </label>
@@ -380,7 +380,7 @@ const CONN_TYPES = [
 let rawAJK=[], rawW58=[], rawIdle=[];
 let ajkWeeks=[], w58Weeks=[], idleWeeks=[];
 let selAjkWeek=0, selW58Week=0, selIdleWeek=0;
-let idleSelCity='总计';
+let idleSelCity='城市汇总';
 let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
 let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
 let chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
@@ -824,7 +824,7 @@ function groupByWeekIdle(daily){
     const uniqueDays=[...new Set(ds)];
     const n=uniqueDays.length; // 唯一日期数，用于流量指标日均
     const avg=k=>Math.round(w['_'+k]/n);   // 流量指标：日均
-    const tot=k=>Math.round(w['_'+k]/n);   // 库存指标：各城市日均加总（=总计总数）
+    const tot=k=>Math.round(w['_'+k]/n);   // 库存指标：各城市日均加总（=城市汇总总数）
     w.week=ds[0]; w.weekEnd=ds[ds.length-1];
     w.days=uniqueDays;
     // 库存型（在线楼盘数/投放成功盘）取各城市之和（日均加总）
@@ -911,8 +911,10 @@ function handleIdleCsvUpload(e){
 function buildIdleCityFilter(){
   const cities=[...new Set(rawIdle.map(d=>d.city).filter(Boolean))].sort();
   const sel=document.getElementById('idleCitySelect');
-  sel.innerHTML='<option value="总计">总计</option>'+cities.map(c=>`<option value="${c}"${c===idleSelCity?' selected':''}>${c}</option>`).join('');
+  sel.innerHTML='<option value="城市汇总">城市汇总</option>'+cities.map(c=>`<option value="${c}"${c===idleSelCity?' selected':''}>${c}</option>`).join('');
   sel.value=idleSelCity;
+  // 上传入口仅有 token（管理员）可见
+  document.getElementById('idleCsvUploadBtn').style.display=localStorage.getItem('gh_token')?'inline-block':'none';
   buildIdleTop5();
 }
 
@@ -950,7 +952,7 @@ function selectIdleCity(city){
   idleSelCity=city;
   document.getElementById('idleCitySelect').value=city;
   buildIdleTop5(); // 更新TOP5按钮高亮
-  const filtered = city==='总计' ? rawIdle : rawIdle.filter(d=>d.city===city);
+  const filtered = city==='城市汇总' ? rawIdle : rawIdle.filter(d=>d.city===city);
   idleWeeks=groupByWeekIdle(filtered);
   selIdleWeek=idleWeeks.length-1;
   buildIdleWeekNav();
@@ -961,9 +963,9 @@ function selectIdleCity(city){
 
 function renderIdle(){
   if(!rawIdle.length) return;
-  idleSelCity='总计';
+  idleSelCity='城市汇总';
   buildIdleCityFilter();
-  const filtered = rawIdle; // 默认总计
+  const filtered = rawIdle; // 默认城市汇总
   idleWeeks=groupByWeekIdle(filtered);
   selIdleWeek=idleWeeks.length-1;
   buildIdleWeekNav();
@@ -999,9 +1001,9 @@ function renderIdleCmp(){
   if(prev) document.getElementById('thIdlePrev').textContent=wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
   const rows=[
     {sep:true, label:'── 楼盘规模'},
-    {label:'在线楼盘总数',         sub:idleSelCity==='总计'?'城市加总':'日均', key:'online_cnt',   fmt:v=>fmt(v,0)},
-    {label:'在线非售罄楼盘数',    sub:idleSelCity==='总计'?'城市加总':'日均', key:'unsold_cnt',   fmt:v=>fmt(v,0)},
-    {label:'投放成功盘数',        sub:idleSelCity==='总计'?'城市加总':'日均', key:'placed_cnt',   fmt:v=>fmt(v,0)},
+    {label:'在线楼盘总数',         sub:idleSelCity==='城市汇总'?'城市加总':'日均', key:'online_cnt',   fmt:v=>fmt(v,0)},
+    {label:'在线非售罄楼盘数',    sub:idleSelCity==='城市汇总'?'城市加总':'日均', key:'unsold_cnt',   fmt:v=>fmt(v,0)},
+    {label:'投放成功盘数',        sub:idleSelCity==='城市汇总'?'城市加总':'日均', key:'placed_cnt',   fmt:v=>fmt(v,0)},
     {label:'投放成功盘/在线楼盘', sub:'率',   key:'placed_rate2',     fmt:v=>fmtPct(v), isRate:true},
     {label:'投放成功盘/在线非售罄',sub:'率',  key:'placed_rate',      fmt:v=>fmtPct(v), isRate:true},
     {sep:true, label:'── VCUV'},
