@@ -130,9 +130,41 @@ function checkPw(){
   </div>
   <span class="updated" id="updatedText">加载中…</span>
   <a href="https://miguelsh1009-collab.github.io/anjuke-data-dashboard/" target="_blank" style="padding:6px 14px;border-radius:6px;background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap">城市数据看板 ↗</a>
+  <button class="upload-btn" onclick="toggleSettings()" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);color:var(--muted)">⚙ 配置</button>
+  <span id="pushStatus" style="font-size:11px;color:var(--muted);display:none"></span>
   <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传 xlsx</button>
   <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleUpload(event)">
 </div>
+
+<!-- GitHub 配置面板 -->
+<div id="settingsPanel" style="display:none;background:var(--card);border-bottom:1px solid var(--border);padding:14px 24px">
+  <div style="max-width:700px;display:flex;flex-direction:column;gap:10px">
+    <div style="font-size:12px;color:var(--muted)">配置后，上传 xlsx/CSV 会自动同步到 GitHub，其他人访问即可看到最新数据</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">GitHub 用户名</div>
+        <input id="ghUser" placeholder="例如：miguelsh1009-collab"
+          style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:var(--font)">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">仓库名</div>
+        <input id="ghRepo" placeholder="conn-dashboard"
+          style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:var(--font)">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Personal Access Token</div>
+        <input id="ghToken" type="password" placeholder="ghp_xxxxxxxxxxxx"
+          style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:var(--font)">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="saveSettings()" class="upload-btn" style="font-size:12px">保存配置</button>
+      <span id="settingsSaved" style="font-size:12px;color:#34d399;display:none">✓ 已保存</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:8px">Token 仅存在你的浏览器，不会上传</span>
+    </div>
+  </div>
+</div>
+
 <div class="upload-toast" id="uploadToast"></div>
 
 <div class="container">
@@ -870,6 +902,7 @@ function handleIdleCsvUpload(e){
       const cityCount=[...new Set(rawIdle.map(d=>d.city))].length;
       showToast(`城市数据解析完成：${cityCount}个城市，${rawIdle.length}条记录`,false);
       renderIdle();
+      pushToGitHub({ajk:rawAJK, w58:rawW58, idle:rawIdle});
     }catch(err){showToast('解析失败：'+err.message,true);}
   };
   reader.readAsArrayBuffer(file);
@@ -1065,6 +1098,56 @@ function renderIdleCharts(){
   },true);
 }
 
+// ── GitHub 配置 & 推送 ──
+function toggleSettings(){
+  const p=document.getElementById('settingsPanel');
+  p.style.display=p.style.display==='none'?'block':'none';
+}
+function loadSettings(){
+  document.getElementById('ghUser').value=localStorage.getItem('gh_user')||'miguelsh1009-collab';
+  document.getElementById('ghRepo').value=localStorage.getItem('gh_repo')||'conn-dashboard';
+  document.getElementById('ghToken').value=localStorage.getItem('gh_token')||'';
+}
+function saveSettings(){
+  localStorage.setItem('gh_user',document.getElementById('ghUser').value.trim());
+  localStorage.setItem('gh_repo',document.getElementById('ghRepo').value.trim());
+  localStorage.setItem('gh_token',document.getElementById('ghToken').value.trim());
+  const el=document.getElementById('settingsSaved');
+  el.style.display='inline';
+  setTimeout(()=>el.style.display='none',2000);
+}
+function getGHConfig(){
+  return{
+    user:localStorage.getItem('gh_user')||'miguelsh1009-collab',
+    repo:localStorage.getItem('gh_repo')||'conn-dashboard',
+    token:localStorage.getItem('gh_token')||'',
+  };
+}
+function setGHStatus(msg,ok=true){
+  const el=document.getElementById('pushStatus');
+  el.style.display='inline';
+  el.style.color=ok?'#34d399':'#f87171';
+  el.textContent=msg;
+  if(ok) setTimeout(()=>el.style.display='none',4000);
+}
+async function pushToGitHub(data){
+  const{user,repo,token}=getGHConfig();
+  if(!token){setGHStatus('⚠ 未配置Token，数据仅本地可见',false);return;}
+  setGHStatus('正在同步到GitHub…',true);
+  try{
+    const apiUrl=`https://api.github.com/repos/${user}/${repo}/contents/data/data.json`;
+    const headers={Authorization:`token ${token}`,Accept:'application/vnd.github+json','Content-Type':'application/json'};
+    let sha='';
+    try{const r=await fetch(apiUrl,{headers});if(r.ok){const j=await r.json();sha=j.sha||'';}}catch(_){}
+    const content=btoa(unescape(encodeURIComponent(JSON.stringify(data,null,0))));
+    const body={message:`chore: 更新数据 ${new Date().toLocaleDateString('zh-CN')}`,content};
+    if(sha)body.sha=sha;
+    const res=await fetch(apiUrl,{method:'PUT',headers,body:JSON.stringify(body)});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    setGHStatus('✓ 已同步，其他人刷新后可见（CDN约10分钟）',true);
+  }catch(e){setGHStatus('✗ 同步失败：'+e.message,false);}
+}
+
 // ── upload helpers ──
 function formatDate(v) {
   if (!v) return '';
@@ -1208,8 +1291,9 @@ async function handleUpload(event) {
       }
     }
 
-    // persist to localStorage
-    localStorage.setItem('conn_data', JSON.stringify({ajk:ajkData, w58:w58Data, idle:idleData}));
+    // persist to localStorage + push to GitHub
+    const saveData={ajk:ajkData, w58:w58Data, idle:idleData};
+    localStorage.setItem('conn_data', JSON.stringify(saveData));
     rawAJK = ajkData; rawW58 = w58Data; rawIdle = idleData;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
@@ -1222,6 +1306,7 @@ async function handleUpload(event) {
 
     renderAjk();
     showToast(`解析完成：AJK ${ajkData.length}天，58 ${w58Data.length}天，闲置 ${idleData.length}天`, false);
+    pushToGitHub(saveData);
   } catch(e) {
     console.error(e);
     showToast('解析失败：'+e.message, true);
@@ -1231,7 +1316,8 @@ async function handleUpload(event) {
 
 // ── load ──
 async function loadData(){
-  // try localStorage first (from previous upload)
+  loadSettings();
+  // 1. localStorage 优先（本人上传过）
   const cached = localStorage.getItem('conn_data');
   if (cached) {
     try {
@@ -1245,17 +1331,33 @@ async function loadData(){
       }
     } catch(e) { localStorage.removeItem('conn_data'); }
   }
-  // fall back to bundled data
+  // 2. GitHub Pages CDN（其他用户，拿上传者推送的最新数据）
+  const {user, repo} = getGHConfig();
+  try{
+    const cdnUrl = `https://${user}.github.io/${repo}/data/data.json?t=${Math.floor(Date.now()/60000)}`;
+    const res = await fetch(cdnUrl, {cache:'no-store'});
+    if(res.ok){
+      const d = await res.json();
+      if(d.ajk && d.ajk.length){
+        rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
+        const lastDate = rawAJK[rawAJK.length-1]?.date||'--';
+        document.getElementById('updatedText').textContent = '数据至：'+lastDate;
+        renderAjk();
+        return;
+      }
+    }
+  }catch(_){}
+  // 3. 兜底：相对路径
   try{
     const res = await fetch('./data/data.json?t='+Date.now());
     const d = await res.json();
     rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
-    const lastDate = rawAJK[rawAJK.length-1].date;
+    const lastDate = rawAJK[rawAJK.length-1]?.date||'--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
     renderAjk();
   } catch(e){
     console.error(e);
-    document.getElementById('updatedText').textContent = '加载失败：'+e.message;
+    document.getElementById('updatedText').textContent = '加载失败';
   }
 }
 
