@@ -88,6 +88,36 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 </style>
 </head>
 <body>
+<!-- 密码锁 -->
+<div id="pwGate" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="width:7px;height:7px;background:var(--accent);border-radius:50%;box-shadow:0 0 12px var(--accent);margin-bottom:8px"></div>
+  <div style="font-size:15px;font-weight:500;color:var(--text)">新房周数据看板</div>
+  <div style="font-size:13px;color:var(--muted)">请输入访问密码</div>
+  <div style="display:flex;gap:8px;margin-top:4px">
+    <input id="pwInput" type="password" placeholder="密码" onkeydown="if(event.key==='Enter')checkPw()"
+      style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;width:200px;font-family:var(--font);outline:none">
+    <button onclick="checkPw()" style="padding:8px 20px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:14px;font-family:var(--font)">进入</button>
+  </div>
+  <div id="pwErr" style="color:var(--danger);font-size:12px;min-height:18px"></div>
+</div>
+<script>
+(function(){
+  const PW='ajk168';
+  if(localStorage.getItem('pw_ok')===PW){
+    document.getElementById('pwGate').style.display='none';
+  }
+})();
+function checkPw(){
+  const v=document.getElementById('pwInput').value;
+  if(v==='ajk168'){
+    localStorage.setItem('pw_ok','ajk168');
+    document.getElementById('pwGate').style.display='none';
+  } else {
+    document.getElementById('pwErr').textContent='密码错误，请重试';
+    document.getElementById('pwInput').value='';
+  }
+}
+</script>
 <div class="topbar">
   <div style="display:flex;align-items:center;gap:10px">
     <div style="width:7px;height:7px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)"></div>
