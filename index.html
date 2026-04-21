@@ -74,7 +74,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 /* Type toggles */
 .type-pills{display:flex;gap:6px;flex-wrap:wrap}
 .type-pill{padding:3px 10px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;transition:all .15s;font-family:var(--font)}
-.type-pill.on{color:#fff}
+.type-pill.on{color:#fff;border-width:2px}
 
 /* Week nav */
 .week-nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -628,7 +628,7 @@ function renderAjkCmp(){
 function buildAjkTypePills(){
   const container = document.getElementById('ajkTypePills');
   container.innerHTML = CONN_TYPES.map(t=>`
-    <button class="type-pill on" id="pill-${t.key}" style="border-color:${t.color};background:${t.color}22"
+    <button class="type-pill on" id="pill-${t.key}" style="border-color:${t.color};background:${t.color}66"
       onclick="toggleType('${t.key}','${t.color}')">${t.label}</button>
   `).join('');
 }
@@ -638,7 +638,7 @@ function toggleType(key, color){
   else activeTypes.add(key);
   const pill = document.getElementById('pill-'+key);
   pill.classList.toggle('on', activeTypes.has(key));
-  pill.style.background = activeTypes.has(key) ? color+'22' : 'transparent';
+  pill.style.background = activeTypes.has(key) ? color+'66' : 'transparent';
   renderAjkTrend();
 }
 
