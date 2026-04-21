@@ -1026,7 +1026,7 @@ function buildIdleMonthNav(){
   nav.innerHTML=idleMonths.slice(start).map((m,i)=>{
     const idx=start+i;
     const active=idleCmpMode==='month'&&idx===selIdleMonth;
-    return `<button class="week-btn ${active?'active':''}" onclick="idleCmpMode='month';selIdleMonth=${idx};buildIdleWeekNav();buildIdleMonthNav();renderIdleCmpTable()">${mLabel(m.mo)}（${m.days.length}天）</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="idleCmpMode='month';selIdleMonth=${idx};buildIdleWeekNav();buildIdleMonthNav();renderIdleCmpTable();renderIdleCharts()">${mLabel(m.mo)}（${m.days.length}天）</button>`;
   }).join('');
 }
 
@@ -1084,7 +1084,7 @@ function buildIdleWeekNav(){
   nav.innerHTML=idleWeeks.slice(start).map((w,i)=>{
     const idx=start+i;
     const active=idleCmpMode==='week'&&idx===selIdleWeek;
-    return `<button class="week-btn ${active?'active':''}" onclick="idleCmpMode='week';selIdleWeek=${idx};buildIdleWeekNav();buildIdleMonthNav();renderIdleKpi();renderIdleCmpTable()">${wLabel(w.week,w.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="idleCmpMode='week';selIdleWeek=${idx};buildIdleWeekNav();buildIdleMonthNav();renderIdleKpi();renderIdleCmpTable();renderIdleCharts()">${wLabel(w.week,w.days)}</button>`;
   }).join('');
 }
 
@@ -1137,14 +1137,18 @@ function renderIdle(){
 }
 
 function renderIdleCharts(){
-  const weeks=idleWeeks.slice(-26);
-  const labels=weeks.map(w=>wLabel(w.week,w.days));
+  const isMonth=idleCmpMode==='month';
+  const pts=isMonth?idleMonths:idleWeeks.slice(-26);
+  const labels=isMonth?pts.map(m=>mLabel(m.mo)):pts.map(w=>wLabel(w.week,w.days));
+  const suffix=isMonth?'（月）':'（周）';
+  const ptsRef=()=>pts;
 
   // 楼盘数 + 投放率
   if(!chartIdleCnt) chartIdleCnt=echarts.init(document.getElementById('idleCntChart'));
+  document.querySelector('#idleCntChart').closest('.section').querySelector('.section-title').textContent='在线楼盘数 & 投放成功盘 趋势'+suffix;
   chartIdleCnt.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>idleWeeks.slice(-26),
+    tooltip: makeTip(ptsRef,
       [{key:'online_cnt',isRate:false},{key:'placed_cnt',isRate:false},{key:'placed_rate2',isRate:true}],
       (v,pi)=>pi<2?fmt(v,0):v.toFixed(2)+'%'),
     legend:{data:['在线楼盘数','投放成功盘数','投放成功盘/在线楼盘(%)'],textStyle:{color:'#94a3b8'},top:0},
@@ -1155,17 +1159,18 @@ function renderIdleCharts(){
       {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
     ],
     series:[
-      {name:'在线楼盘数',   type:'bar', data:weeks.map(w=>w.online_cnt), itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'投放成功盘数', type:'line',smooth:true,data:weeks.map(w=>w.placed_cnt),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:0},
-      {name:'投放成功盘/在线楼盘(%)',type:'line',smooth:true,data:weeks.map(w=>w.placed_rate2!=null?+w.placed_rate2.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'在线楼盘数',   type:'bar', data:pts.map(w=>w.online_cnt), itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'投放成功盘数', type:'line',smooth:true,data:pts.map(w=>w.placed_cnt),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:0},
+      {name:'投放成功盘/在线楼盘(%)',type:'line',smooth:true,data:pts.map(w=>w.placed_rate2!=null?+w.placed_rate2.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 
   // VCUV趋势
   if(!chartIdleVcuv) chartIdleVcuv=echarts.init(document.getElementById('idleVcuvChart'));
+  document.querySelector('#idleVcuvChart').closest('.section').querySelector('.section-title').textContent='VCUV 趋势'+suffix;
   chartIdleVcuv.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>idleWeeks.slice(-26),
+    tooltip: makeTip(ptsRef,
       [{key:'online_vcuv',isRate:false},{key:'placed_vcuv',isRate:false},{key:'placed_vcuv_rate',isRate:true}],
       (v,pi)=>pi<2?(v/10000).toFixed(1)+'万':v.toFixed(2)+'%'),
     legend:{data:['在线盘总VCUV','投放盘VCUV','投放VCUV占比(%)'],textStyle:{color:'#94a3b8'},top:0},
@@ -1176,17 +1181,18 @@ function renderIdleCharts(){
       {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
     ],
     series:[
-      {name:'在线盘总VCUV',type:'bar', data:weeks.map(w=>w.online_vcuv),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'投放盘VCUV',  type:'line',smooth:true,data:weeks.map(w=>w.placed_vcuv),itemStyle:{color:'#a78bfa'},lineStyle:{color:'#a78bfa',width:2},symbolSize:5,yAxisIndex:0},
-      {name:'投放VCUV占比(%)',type:'line',smooth:true,data:weeks.map(w=>w.placed_vcuv_rate!=null?+w.placed_vcuv_rate.toFixed(2):null),itemStyle:{color:'#34d399'},lineStyle:{color:'#34d399',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'在线盘总VCUV',type:'bar', data:pts.map(w=>w.online_vcuv),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'投放盘VCUV',  type:'line',smooth:true,data:pts.map(w=>w.placed_vcuv),itemStyle:{color:'#a78bfa'},lineStyle:{color:'#a78bfa',width:2},symbolSize:5,yAxisIndex:0},
+      {name:'投放VCUV占比(%)',type:'line',smooth:true,data:pts.map(w=>w.placed_vcuv_rate!=null?+w.placed_vcuv_rate.toFixed(2):null),itemStyle:{color:'#34d399'},lineStyle:{color:'#34d399',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 
   // 线索趋势
   if(!chartIdleLead) chartIdleLead=echarts.init(document.getElementById('idleLeadChart'));
+  document.querySelector('#idleLeadChart').closest('.section').querySelector('.section-title').textContent='线索量趋势'+suffix;
   chartIdleLead.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>idleWeeks.slice(-26),
+    tooltip: makeTip(ptsRef,
       [{key:'lead_total',isRate:false},{key:'lead_adv',isRate:false},{key:'lead_brk',isRate:false},{key:'lead_brk_rate',isRate:true}],
       (v,pi)=>pi<3?fmt(v,0):v.toFixed(2)+'%'),
     legend:{data:['总线索','顾问线索','经纪人线索','经纪人线索/总线索(%)'],textStyle:{color:'#94a3b8'},top:0},
@@ -1197,10 +1203,10 @@ function renderIdleCharts(){
       {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
     ],
     series:[
-      {name:'总线索',    type:'bar', data:weeks.map(w=>w.lead_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'顾问线索',  type:'line',smooth:true,data:weeks.map(w=>w.lead_adv), itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:4,yAxisIndex:0},
-      {name:'经纪人线索',type:'line',smooth:true,data:weeks.map(w=>w.lead_brk), itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:4,yAxisIndex:0},
-      {name:'经纪人线索/总线索(%)',type:'line',smooth:true,data:weeks.map(w=>w.lead_brk_rate!=null?+w.lead_brk_rate.toFixed(2):null),itemStyle:{color:'#ef4444'},lineStyle:{color:'#ef4444',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'总线索',    type:'bar', data:pts.map(w=>w.lead_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'顾问线索',  type:'line',smooth:true,data:pts.map(w=>w.lead_adv), itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:4,yAxisIndex:0},
+      {name:'经纪人线索',type:'line',smooth:true,data:pts.map(w=>w.lead_brk), itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:4,yAxisIndex:0},
+      {name:'经纪人线索/总线索(%)',type:'line',smooth:true,data:pts.map(w=>w.lead_brk_rate!=null?+w.lead_brk_rate.toFixed(2):null),itemStyle:{color:'#ef4444'},lineStyle:{color:'#ef4444',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 }
