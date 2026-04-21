@@ -522,10 +522,22 @@ function wLabel(weekStart, days){
 }
 
 // ── tab ──
+function updateDateLabel(name){
+  let date='--';
+  if(name==='idle'){
+    const sorted=[...rawIdle].filter(d=>d.date).sort((a,b)=>b.date.localeCompare(a.date));
+    date=sorted[0]?.date||'--';
+  } else {
+    date=rawAJK[rawAJK.length-1]?.date||'--';
+  }
+  document.getElementById('updatedText').textContent=date!=='--'?'数据至：'+date:'';
+}
+
 function switchTab(name){
   document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['ajk','w58','idle'][i]===name));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
+  updateDateLabel(name);
   if(name==='w58')  setTimeout(()=>renderW58(),60);
   if(name==='idle') setTimeout(()=>renderIdle(),60);
 }
@@ -924,6 +936,7 @@ function handleIdleCsvUpload(e){
       const cityCount=[...new Set(rawIdle.map(d=>d.city))].length;
       showToast(`城市数据解析完成：${cityCount}个城市，${rawIdle.length}条记录`,false);
       renderIdle();
+      updateDateLabel('idle');
       pushToGitHub({ajk:rawAJK, w58:rawW58, idle:rawIdle});
     }catch(err){showToast('解析失败：'+err.message,true);}
   };
