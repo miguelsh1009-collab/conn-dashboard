@@ -312,6 +312,26 @@ function checkPw(){
     </div>
   </div>
 
+  <!-- 月对比 -->
+  <div class="section">
+    <div class="section-hd">
+      <span class="section-title">月对比</span>
+      <div class="week-nav" id="idleMonthNav"></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="cmp-table" id="idleMonthCmpTable">
+        <thead><tr>
+          <th>指标</th>
+          <th id="thIdleMonthCur">当前月</th>
+          <th id="thIdleMonthPrev">上一月</th>
+          <th>变化</th>
+          <th>变化%</th>
+        </tr></thead>
+        <tbody id="idleMonthCmpBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- 楼盘数趋势 -->
   <div class="section">
     <div class="section-hd"><span class="section-title">在线楼盘数 & 投放成功盘 趋势（周）</span></div>
@@ -388,8 +408,8 @@ const CONN_TYPES = [
 ];
 
 let rawAJK=[], rawW58=[], rawIdle=[];
-let ajkWeeks=[], w58Weeks=[], idleWeeks=[];
-let selAjkWeek=0, selW58Week=0, selIdleWeek=0;
+let ajkWeeks=[], w58Weeks=[], idleWeeks=[], idleMonths=[];
+let selAjkWeek=0, selW58Week=0, selIdleWeek=0, selIdleMonth=0;
 let idleSelCity='城市汇总';
 let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
 let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
@@ -970,6 +990,94 @@ function buildIdleTop5(){
   document.getElementById('idleTop5BrkBtns').innerHTML=mkBtns([...cities].sort((a,b)=>b.brk_rate-a.brk_rate),'brk_rate');
 }
 
+function groupByMonthIdle(daily){
+  const sorted=[...daily].filter(d=>d.online_cnt).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted.length) return [];
+  const map={};
+  sorted.forEach(d=>{
+    const mo=d.date.substring(0,7); // YYYY-MM
+    if(!map[mo]) map[mo]={mo,days:[],
+      _online_cnt:0,_online_vcuv:0,_lead_total:0,_unsold_cnt:0,
+      _placed_cnt:0,_placed_vcuv:0,_lead_adv:0,_lead_brk:0,_lead_placed:0};
+    const m=map[mo];
+    m.days.push(d.date);
+    ['online_cnt','online_vcuv','lead_total','unsold_cnt',
+     'placed_cnt','placed_vcuv','lead_adv','lead_brk','lead_placed'].forEach(k=>{
+      if(d[k]) m['_'+k]+=d[k];
+    });
+  });
+  return Object.values(map).sort((a,b)=>a.mo.localeCompare(b.mo)).map(m=>{
+    const uniqueDays=[...new Set(m.days)];
+    const n=uniqueDays.length;
+    const avg=k=>Math.round(m['_'+k]/n);
+    const online_cnt=avg('online_cnt'), online_vcuv=avg('online_vcuv');
+    const unsold_cnt=avg('unsold_cnt'), placed_cnt=avg('placed_cnt');
+    const placed_vcuv=avg('placed_vcuv'), lead_total=avg('lead_total');
+    const lead_adv=avg('lead_adv'), lead_brk=avg('lead_brk'), lead_placed=avg('lead_placed');
+    return {...m, days:uniqueDays,
+      online_cnt, online_vcuv, lead_total, unsold_cnt,
+      placed_cnt, placed_vcuv, lead_adv, lead_brk, lead_placed,
+      placed_rate:  unsold_cnt ? +(placed_cnt/unsold_cnt*100).toFixed(4) : null,
+      placed_rate2: online_cnt ? +(placed_cnt/online_cnt*100).toFixed(4) : null,
+      placed_vcuv_rate: online_vcuv ? +(placed_vcuv/online_vcuv*100).toFixed(4) : null,
+      lead_conv:    placed_vcuv ? +(lead_placed/placed_vcuv*100).toFixed(4) : null,
+      lead_brk_rate:lead_total  ? +(lead_brk/lead_total*100).toFixed(4) : null,
+    };
+  });
+}
+
+function mLabel(mo){ // "2026-03" → "26.3月"
+  const [y,m]=mo.split('-');
+  return `${y.slice(2)}.${+m}月`;
+}
+
+function buildIdleMonthNav(){
+  const nav=document.getElementById('idleMonthNav');
+  const start=Math.max(0,idleMonths.length-6);
+  nav.innerHTML=idleMonths.slice(start).map((m,i)=>{
+    const idx=start+i;
+    return `<button class="week-btn ${idx===selIdleMonth?'active':''}" onclick="selIdleMonth=${idx};buildIdleMonthNav();renderIdleMonthCmp()">${mLabel(m.mo)}（${m.days.length}天）</button>`;
+  }).join('');
+}
+
+function renderIdleMonthCmp(){
+  if(!idleMonths.length) return;
+  const cur=idleMonths[selIdleMonth], prev=selIdleMonth>0?idleMonths[selIdleMonth-1]:null;
+  document.getElementById('thIdleMonthCur').textContent=mLabel(cur.mo)+'（'+cur.days.length+'天）';
+  document.getElementById('thIdleMonthPrev').textContent=prev?mLabel(prev.mo)+'（'+prev.days.length+'天）':'--';
+  const sub=idleSelCity==='城市汇总'?'城市加总':'日均';
+  const rows=[
+    {sep:true, label:'── 楼盘规模'},
+    {label:'在线楼盘总数',         sub, key:'online_cnt',   fmt:v=>fmt(v,0)},
+    {label:'在线非售罄楼盘数',    sub, key:'unsold_cnt',   fmt:v=>fmt(v,0)},
+    {label:'投放成功盘数',        sub, key:'placed_cnt',   fmt:v=>fmt(v,0)},
+    {label:'投放成功盘/在线楼盘', sub:'率',   key:'placed_rate2',     fmt:v=>fmtPct(v), isRate:true},
+    {label:'投放成功盘/在线非售罄',sub:'率',  key:'placed_rate',      fmt:v=>fmtPct(v), isRate:true},
+    {sep:true, label:'── VCUV'},
+    {label:'在线盘总VCUV',        sub:'日均', key:'online_vcuv',      fmt:v=>fmtW(v)},
+    {label:'投放盘VCUV',          sub:'日均', key:'placed_vcuv',      fmt:v=>fmtW(v)},
+    {label:'投放盘VCUV占比',      sub:'率',   key:'placed_vcuv_rate', fmt:v=>fmtPct(v), isRate:true},
+    {sep:true, label:'── 线索'},
+    {label:'微聊+电话总线索',     sub:'日均', key:'lead_total',       fmt:v=>fmt(v,0)},
+    {label:'投放盘顾问线索',      sub:'日均', key:'lead_adv',         fmt:v=>fmt(v,0)},
+    {label:'投放盘经纪人线索',    sub:'日均', key:'lead_brk',         fmt:v=>fmt(v,0)},
+    {label:'经纪人线索/总线索',   sub:'率',   key:'lead_brk_rate',    fmt:v=>fmtPct(v), isRate:true},
+    {label:'投放盘线索/投放VCUV', sub:'转化率',key:'lead_conv',       fmt:v=>fmtPct(v), isRate:true},
+  ];
+  document.getElementById('idleMonthCmpBody').innerHTML=rows.map(r=>{
+    if(r.sep) return `<tr><td colspan="5" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
+    const cv=cur[r.key], pv=prev?prev[r.key]:null;
+    const chgParts=prev?chgEl(cv,pv,!!r.isRate).split('|'):['--','--'];
+    return `<tr>
+      <td><span class="metric-name">${r.label}</span>${r.sub?`<br><span class="metric-sub">${r.sub}</span>`:''}</td>
+      <td class="num">${r.fmt(cv)}</td>
+      <td class="num">${prev?r.fmt(pv):'--'}</td>
+      <td class="num">${chgParts[0]}</td>
+      <td class="num">${chgParts[1]}</td>
+    </tr>`;
+  }).join('');
+}
+
 function selectIdleCity(city){
   idleSelCity=city;
   document.getElementById('idleCitySelect').value=city;
@@ -977,9 +1085,13 @@ function selectIdleCity(city){
   const filtered = city==='城市汇总' ? rawIdle : rawIdle.filter(d=>d.city===city);
   idleWeeks=groupByWeekIdle(filtered);
   selIdleWeek=idleWeeks.length-1;
+  idleMonths=groupByMonthIdle(filtered);
+  selIdleMonth=idleMonths.length-1;
   buildIdleWeekNav();
   renderIdleKpi();
   renderIdleCmp();
+  buildIdleMonthNav();
+  renderIdleMonthCmp();
   renderIdleCharts();
 }
 
@@ -991,9 +1103,13 @@ function renderIdle(){
   const filtered = rawIdle; // 默认城市汇总
   idleWeeks=groupByWeekIdle(filtered);
   selIdleWeek=idleWeeks.length-1;
+  idleMonths=groupByMonthIdle(filtered);
+  selIdleMonth=idleMonths.length-1;
   buildIdleWeekNav();
   renderIdleKpi();
   renderIdleCmp();
+  buildIdleMonthNav();
+  renderIdleMonthCmp();
   renderIdleCharts();
 }
 
