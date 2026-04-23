@@ -74,7 +74,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 /* Type toggles */
 .type-pills{display:flex;gap:6px;flex-wrap:wrap}
 .type-pill{padding:3px 10px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;transition:all .15s;font-family:var(--font)}
-.type-pill.on{color:rgba(13,15,20,.9);border-width:2px;font-weight:600;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.type-pill.on{color:rgba(13,15,20,.9);border-width:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
 
 /* Week nav */
 .week-nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -398,7 +398,7 @@ let rawAJK=[], rawW58=[], rawIdle=[];
 let ajkWeeks=[], w58Weeks=[], idleWeeks=[], idleMonths=[];
 let selAjkWeek=0, selW58Week=0, selIdleWeek=0, selIdleMonth=0;
 let idleSelCity='城市汇总';
-let activeTypes = new Set(CONN_TYPES.map(t=>t.key));
+let activeTypes = new Set(['rate_total','rate_active']);
 let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
 let chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
 let chartIdleCnt=null, chartIdleVcuv=null, chartIdleLead=null;
@@ -628,7 +628,7 @@ function renderAjkCmp(){
 function buildAjkTypePills(){
   const container = document.getElementById('ajkTypePills');
   container.innerHTML = CONN_TYPES.map(t=>`
-    <button class="type-pill on" id="pill-${t.key}" style="border-color:${t.color};background:${t.color}aa"
+    <button class="type-pill ${activeTypes.has(t.key)?'on':''}" id="pill-${t.key}" style="border-color:${t.color};background:${activeTypes.has(t.key)?t.color+'aa':'transparent'}"
       onclick="toggleType('${t.key}','${t.color}')">${t.label}</button>
   `).join('');
 }
