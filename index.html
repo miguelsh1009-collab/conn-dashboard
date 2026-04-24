@@ -828,7 +828,7 @@ function renderAjkKpi(){
       return rate?`<span class="${cls}">${sign}${diff.toFixed(2)}pp</span>`
                  :`<span class="${cls}">${sign}${(diff/Math.abs(b)*100).toFixed(1)}%</span>`;
     };
-    return `周环比 ${hocStr(cv,pv?.value??pv,isRate)}<br>周同比 ${hocStr(cv,yv,isRate)}`;
+    return `环比 ${hocStr(cv,pv?.value??pv,isRate)}<br>同比 ${hocStr(cv,yv,isRate)}`;
   };
   const kpis=[
     {label:'日均UV',      val:fmtW(cur.uv),         sub:mkSub(cur.uv,         prev?.uv,         yoy?.uv,         false)},
