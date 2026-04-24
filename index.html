@@ -1170,10 +1170,12 @@ function handleIdleCsvUpload(e){
         lead_placed:Math.round(r.lead_placed), lead_brk:Math.round(r.lead_brk),
         lead_adv:Math.max(0,Math.round(r.lead_placed-r.lead_brk)),
       }));
-      // 持久化到 localStorage
-      const saved=JSON.parse(localStorage.getItem('conn_data')||'{}');
-      saved.idle=rawIdle;
-      localStorage.setItem('conn_data',JSON.stringify(saved));
+      // 持久化到 localStorage（数据过大时静默跳过，依赖 GitHub 同步）
+      try {
+        const saved=JSON.parse(localStorage.getItem('conn_data')||'{}');
+        saved.idle=rawIdle;
+        localStorage.setItem('conn_data',JSON.stringify(saved));
+      } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
       const cityCount=[...new Set(rawIdle.map(d=>d.city))].length;
       showToast(`城市数据解析完成：${cityCount}个城市，${rawIdle.length}条记录`,false);
       renderIdle();
@@ -1551,7 +1553,7 @@ async function handleUpload(event) {
     if (!ajkData) return;
 
     const saveData={ajk:ajkData, w58:rawW58, idle:rawIdle};
-    localStorage.setItem('conn_data', JSON.stringify(saveData));
+    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
     rawAJK = ajkData;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
@@ -1684,7 +1686,7 @@ async function handleAjkUpload(event) {
     if (!ajkData) return;
 
     const saveData = {ajk:ajkData, w58:rawW58, idle:rawIdle};
-    localStorage.setItem('conn_data', JSON.stringify(saveData));
+    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
     rawAJK = ajkData;
     updateDateLabel('ajk');
 
@@ -1800,7 +1802,7 @@ async function handleW58Upload(event) {
     const w58Data = parseW58Sheet(wb);
     if (!w58Data) return;
     const saveData = {ajk:rawAJK, w58:w58Data, idle:rawIdle};
-    localStorage.setItem('conn_data', JSON.stringify(saveData));
+    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
     rawW58 = w58Data;
     if (document.getElementById('page-w58').classList.contains('active')) {
       renderW58();
