@@ -215,11 +215,11 @@ function checkPw(){
           <th>指标</th>
           <th id="thCur">当前期</th>
           <th id="thPrev">环比期</th>
-          <th>周环比变化</th>
-          <th>周环比%</th>
+          <th id="thHocChg">周环比变化</th>
+          <th id="thHocPct">周环比%</th>
           <th id="thYoy">同比期</th>
-          <th>周同比变化</th>
-          <th>周同比%</th>
+          <th id="thYoyChg">周同比变化</th>
+          <th id="thYoyPct">周同比%</th>
         </tr></thead>
         <tbody id="ajkCmpBody"></tbody>
       </table>
@@ -827,6 +827,12 @@ function renderAjkKpi(){
 
 function renderAjkCmp(){
   let cur, prev, yoy=null;
+  const pfx = ajkCmpMode === 'month' ? '月' : '周';
+  document.getElementById('thHocChg').textContent = pfx+'环比变化';
+  document.getElementById('thHocPct').textContent = pfx+'环比%';
+  document.getElementById('thYoyChg').textContent = pfx+'同比变化';
+  document.getElementById('thYoyPct').textContent = pfx+'同比%';
+
   if(ajkCmpMode === 'month'){
     cur = ajkMonths[selAjkMonth];
     prev = selAjkMonth>0 ? ajkMonths[selAjkMonth-1] : null;
