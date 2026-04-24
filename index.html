@@ -755,7 +755,7 @@ function buildAjkWeekNav(){
   nav.innerHTML = ajkWeeks.slice(start).map((w,i)=>{
     const idx = start+i;
     const active = ajkCmpMode==='week' && idx===selAjkWeek;
-    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='week';selAjkWeek=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkKpi();renderAjkCmp()">${wLabel(w.week,w.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='week';selAjkWeek=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkKpi();renderAjkCmp();renderAjkTrend();renderAjkUv();renderAjkConnVol()">${wLabel(w.week,w.days)}</button>`;
   }).join('');
 }
 
@@ -766,7 +766,7 @@ function buildAjkMonthNav(){
   nav.innerHTML = ajkMonths.slice(start).map((m,i)=>{
     const idx = start+i;
     const active = ajkCmpMode==='month' && idx===selAjkMonth;
-    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='month';selAjkMonth=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp()">${mLabelFull(m.mo,m.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='month';selAjkMonth=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp();renderAjkTrend();renderAjkUv();renderAjkConnVol()">${mLabelFull(m.mo,m.days)}</button>`;
   }).join('');
 }
 
@@ -859,30 +859,31 @@ function toggleType(key, color){
 
 function renderAjkTrend(){
   if(!chartAjkTrend) chartAjkTrend = echarts.init(document.getElementById('ajkTrendChart'));
-  const weeks = ajkWeeks.slice(-26); // last 26 weeks
-  const labels = weeks.map(w=>wLabel(w.week,w.days));
+  const isMonth = ajkCmpMode === 'month';
+  const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
+  const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   const visTypes = CONN_TYPES.filter(t=>activeTypes.has(t.key));
   const opts = {...chartOpts(),
-    tooltip: makeTip(()=>weeks, visTypes.map(t=>({key:t.key,isRate:true})), (v)=>v.toFixed(3)+'%'),
+    tooltip: makeTip(()=>data, visTypes.map(t=>({key:t.key,isRate:true})), (v)=>v.toFixed(3)+'%'),
     xAxis:xAxis(labels), yAxis:yAxis(v=>v+'%'),
     series: visTypes.map(t=>({
       name:t.label, type:'line', smooth:true,
-      data: weeks.map(w=>w[t.key]!=null?+w[t.key].toFixed(3):null),
+      data: data.map(d=>d[t.key]!=null?+d[t.key].toFixed(3):null),
       itemStyle:{color:t.color}, lineStyle:{color:t.color,width:2},
       symbolSize:4, connectNulls:true,
     }))
   };
   chartAjkTrend.setOption(opts, true);
-
 }
 
 function renderAjkConnVol(){
   if(!chartAjkConn) chartAjkConn = echarts.init(document.getElementById('ajkConnVolChart'));
-  const weeks = ajkWeeks.slice(-26);
-  const labels = weeks.map(w=>wLabel(w.week,w.days));
+  const isMonth = ajkCmpMode === 'month';
+  const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
+  const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkConn.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>ajkWeeks.slice(-26), [{key:'conn_total',isRate:false},{key:'rate_total',isRate:true}], (v,pi)=>pi===0?(v>9999?(v/10000).toFixed(1)+'万':v.toFixed(0)):v.toFixed(3)+'%'),
+    tooltip: makeTip(()=>data, [{key:'conn_total',isRate:false},{key:'rate_total',isRate:true}], (v,pi)=>pi===0?(v>9999?(v/10000).toFixed(1)+'万':v.toFixed(0)):v.toFixed(3)+'%'),
     legend:{data:['有效连接数-新（日均）','有效连接数-新/vcuv(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:60,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -891,19 +892,20 @@ function renderAjkConnVol(){
       {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
     ],
     series:[
-      {name:'有效连接数-新（日均）',type:'bar',data:weeks.map(w=>w.conn_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'有效连接数-新/vcuv(%)',type:'line',smooth:true,data:weeks.map(w=>w.rate_total!=null?+w.rate_total.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'有效连接数-新（日均）',type:'bar',data:data.map(d=>d.conn_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'有效连接数-新/vcuv(%)',type:'line',smooth:true,data:data.map(d=>d.rate_total!=null?+d.rate_total.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 }
 
 function renderAjkUv(){
   if(!chartAjkUv) chartAjkUv = echarts.init(document.getElementById('ajkUvChart'));
-  const weeks = ajkWeeks.slice(-26);
-  const labels = weeks.map(w=>wLabel(w.week,w.days));
+  const isMonth = ajkCmpMode === 'month';
+  const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
+  const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkUv.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>ajkWeeks.slice(-26), [{key:'uv',isRate:false},{key:'vcuv_rate',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)+'%'),
+    tooltip: makeTip(()=>data, [{key:'uv',isRate:false},{key:'vcuv_rate',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)+'%'),
     legend:{data:['UV（万）','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -912,8 +914,8 @@ function renderAjkUv(){
       {name:'%',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
     ],
     series:[
-      {name:'UV（万）',type:'bar',data:weeks.map(w=>w.uv),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'VCUV/UV(%)',type:'line',smooth:true,data:weeks.map(w=>w.vcuv_rate!=null?+w.vcuv_rate.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'UV（万）',type:'bar',data:data.map(d=>d.uv),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'VCUV/UV(%)',type:'line',smooth:true,data:data.map(d=>d.vcuv_rate!=null?+d.vcuv_rate.toFixed(2):null),itemStyle:{color:'#22d3ee'},lineStyle:{color:'#22d3ee',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 }
@@ -939,7 +941,7 @@ function buildW58WeekNav(){
   nav.innerHTML = w58Weeks.slice(start).map((w,i)=>{
     const idx=start+i;
     const active = w58CmpMode==='week' && idx===selW58Week;
-    return `<button class="week-btn ${active?'active':''}" onclick="w58CmpMode='week';selW58Week=${idx};buildW58WeekNav();buildW58MonthNav();renderW58Kpi();renderW58Cmp()">${wLabel(w.week,w.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="w58CmpMode='week';selW58Week=${idx};buildW58WeekNav();buildW58MonthNav();renderW58Kpi();renderW58Cmp();renderW58Charts()">${wLabel(w.week,w.days)}</button>`;
   }).join('');
 }
 
@@ -950,7 +952,7 @@ function buildW58MonthNav(){
   nav.innerHTML = w58Months.slice(start).map((m,i)=>{
     const idx=start+i;
     const active = w58CmpMode==='month' && idx===selW58Month;
-    return `<button class="week-btn ${active?'active':''}" onclick="w58CmpMode='month';selW58Month=${idx};buildW58WeekNav();buildW58MonthNav();renderW58Cmp()">${mLabelFull(m.mo,m.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="w58CmpMode='month';selW58Month=${idx};buildW58WeekNav();buildW58MonthNav();renderW58Cmp();renderW58Charts()">${mLabelFull(m.mo,m.days)}</button>`;
   }).join('');
 }
 
@@ -1002,14 +1004,15 @@ function renderW58Cmp(){
 }
 
 function renderW58Charts(){
-  const weeks = w58Weeks.slice(-26);
-  const labels = weeks.map(w=>wLabel(w.week,w.days));
+  const isMonth = w58CmpMode === 'month';
+  const weeks = isMonth ? w58Months : w58Weeks.slice(-26);
+  const labels = isMonth ? weeks.map(m=>mLabelFull(m.mo,m.days)) : weeks.map(w=>wLabel(w.week,w.days));
 
   // UV trend (APP + 小程序)
   if(!chartW58Uv) chartW58Uv = echarts.init(document.getElementById('w58UvChart'));
   chartW58Uv.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'uv',isRate:false},{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万'),
+    tooltip: makeTip(()=>weeks, [{key:'uv',isRate:false},{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万'),
     legend:{data:['UV合计','APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1025,7 +1028,7 @@ function renderW58Charts(){
   if(!chartW58Conn) chartW58Conn = echarts.init(document.getElementById('w58ConnChart'));
   chartW58Conn.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'conn_rate',isRate:true},{key:'vcuv_rate',isRate:true}], v=>v.toFixed(2)+'%'),
+    tooltip: makeTip(()=>weeks, [{key:'conn_rate',isRate:true},{key:'vcuv_rate',isRate:true}], v=>v.toFixed(2)+'%'),
     legend:{data:['有效连接/VCUV(%)','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1040,7 +1043,7 @@ function renderW58Charts(){
   if(!chartW58Dev) chartW58Dev = echarts.init(document.getElementById('w58DevChart'));
   chartW58Dev.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万'),
+    tooltip: makeTip(()=>weeks, [{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万'),
     legend:{data:['APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1055,7 +1058,7 @@ function renderW58Charts(){
   if(!chartW58Retain) chartW58Retain = echarts.init(document.getElementById('w58RetainChart'));
   chartW58Retain.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>w58Weeks.slice(-26), [{key:'retain_1d',isRate:true}], v=>v.toFixed(2)+'%'),
+    tooltip: makeTip(()=>weeks, [{key:'retain_1d',isRate:true}], v=>v.toFixed(2)+'%'),
     legend:{data:['次日返回率(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
