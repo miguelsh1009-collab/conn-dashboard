@@ -1178,7 +1178,7 @@ function handleIdleCsvUpload(e){
         const saved=JSON.parse(localStorage.getItem('conn_data')||'{}');
         saved.idle=rawIdle;
         localStorage.setItem('conn_data',JSON.stringify(saved));
-      } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
+      } catch(e) { console.warn('localStorage 空间不足，已清除旧缓存',e); localStorage.removeItem('conn_data'); }
       const cityCount=[...new Set(rawIdle.map(d=>d.city))].length;
       showToast(`城市数据解析完成：${cityCount}个城市，${rawIdle.length}条记录`,false);
       renderIdle();
@@ -1556,7 +1556,7 @@ async function handleUpload(event) {
     if (!ajkData) return;
 
     const saveData={ajk:ajkData, w58:rawW58, idle:rawIdle};
-    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
+    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，已清除旧缓存',e); localStorage.removeItem('conn_data'); }
     rawAJK = ajkData;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
@@ -1689,7 +1689,7 @@ async function handleAjkUpload(event) {
     if (!ajkData) return;
 
     const saveData = {ajk:ajkData, w58:rawW58, idle:rawIdle};
-    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
+    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，已清除旧缓存',e); localStorage.removeItem('conn_data'); }
     rawAJK = ajkData;
     updateDateLabel('ajk');
 
@@ -1805,7 +1805,7 @@ async function handleW58Upload(event) {
     const w58Data = parseW58Sheet(wb);
     if (!w58Data) return;
     const saveData = {ajk:rawAJK, w58:w58Data, idle:rawIdle};
-    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，跳过本地缓存',e); }
+    try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，已清除旧缓存',e); localStorage.removeItem('conn_data'); }
     rawW58 = w58Data;
     if (document.getElementById('page-w58').classList.contains('active')) {
       renderW58();
@@ -1823,44 +1823,52 @@ async function handleW58Upload(event) {
 // ── load ──
 async function loadData(){
   loadSettings();
-  // 1. localStorage 优先（本人上传过）
+  const {user, repo, token} = getGHConfig();
+
+  function applyData(d){
+    rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
+    const lastDate = rawAJK[rawAJK.length-1]?.date || '--';
+    document.getElementById('updatedText').textContent = '数据至：'+lastDate;
+    renderAjk();
+  }
+
+  // 1. GitHub API 实时拉取（有 Token 时，无 CDN 延迟）
+  if(token && user && repo){
+    try{
+      const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/data/data.json`;
+      const res = await fetch(apiUrl, {headers:{Authorization:`token ${token}`,Accept:'application/vnd.github+json'}});
+      if(res.ok){
+        const j = await res.json();
+        const d = JSON.parse(atob(j.content.replace(/\n/g,'')));
+        if(d.ajk && d.ajk.length){ applyData(d); return; }
+      }
+    }catch(_){}
+  }
+
+  // 2. localStorage 优先（无 Token 时本地缓存）
   const cached = localStorage.getItem('conn_data');
   if (cached) {
     try {
       const d = JSON.parse(cached);
-      if (d.ajk && d.ajk.length) {
-        rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
-        const lastDate = rawAJK[rawAJK.length-1]?.date || '--';
-        document.getElementById('updatedText').textContent = '数据至：'+lastDate;
-        renderAjk();
-        return;
-      }
+      if (d.ajk && d.ajk.length) { applyData(d); return; }
     } catch(e) { localStorage.removeItem('conn_data'); }
   }
-  // 2. GitHub Pages CDN（其他用户，拿上传者推送的最新数据）
-  const {user, repo} = getGHConfig();
+
+  // 3. GitHub Pages CDN（无 Token 的其他用户）
   try{
     const cdnUrl = `https://${user}.github.io/${repo}/data/data.json?t=${Math.floor(Date.now()/60000)}`;
     const res = await fetch(cdnUrl, {cache:'no-store'});
     if(res.ok){
       const d = await res.json();
-      if(d.ajk && d.ajk.length){
-        rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
-        const lastDate = rawAJK[rawAJK.length-1]?.date||'--';
-        document.getElementById('updatedText').textContent = '数据至：'+lastDate;
-        renderAjk();
-        return;
-      }
+      if(d.ajk && d.ajk.length){ applyData(d); return; }
     }
   }catch(_){}
-  // 3. 兜底：相对路径
+
+  // 4. 兜底：相对路径
   try{
     const res = await fetch('./data/data.json?t='+Date.now());
     const d = await res.json();
-    rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
-    const lastDate = rawAJK[rawAJK.length-1]?.date||'--';
-    document.getElementById('updatedText').textContent = '数据至：'+lastDate;
-    renderAjk();
+    if(d.ajk && d.ajk.length){ applyData(d); return; }
   } catch(e){
     console.error(e);
     document.getElementById('updatedText').textContent = '加载失败';
