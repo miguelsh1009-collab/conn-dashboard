@@ -214,9 +214,12 @@ function checkPw(){
         <thead><tr>
           <th>指标</th>
           <th id="thCur">当前期</th>
-          <th id="thPrev">上一期</th>
-          <th>变化</th>
-          <th>变化%</th>
+          <th id="thPrev">环比期</th>
+          <th>周环比变化</th>
+          <th>周环比%</th>
+          <th id="thYoy">同比期</th>
+          <th>周同比变化</th>
+          <th>周同比%</th>
         </tr></thead>
         <tbody id="ajkCmpBody"></tbody>
       </table>
@@ -764,7 +767,7 @@ function buildAjkWeekNav(){
   nav.innerHTML = ajkWeeks.slice(start).map((w,i)=>{
     const idx = start+i;
     const active = ajkCmpMode==='week' && idx===selAjkWeek;
-    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='week';selAjkWeek=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkKpi();renderAjkCmp();renderAjkTrend();renderAjkUv();renderAjkConnVol()">${wLabel(w.week,w.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='week';selAjkWeek=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp();renderAjkTrend();renderAjkUv();renderAjkConnVol()">${wLabel(w.week,w.days)}</button>`;
   }).join('');
 }
 
@@ -779,34 +782,66 @@ function buildAjkMonthNav(){
   }).join('');
 }
 
+function findWeekLastYear(weeks, cur){
+  const t = new Date(cur.week+'T00:00:00').getTime() - 364*86400000;
+  return weeks.reduce((best,w)=>{
+    const d = Math.abs(new Date(w.week+'T00:00:00').getTime()-t);
+    return (!best||d<Math.abs(new Date(best.week+'T00:00:00').getTime()-t))?w:best;
+  }, null);
+}
+
+function kpiChg(cur, yoy, key, isRate){
+  const cv = cur[key], yv = yoy?.[key];
+  const hocEl = (a,b,rate) => {
+    if(a==null||b==null) return '--';
+    const diff=a-b, sign=diff>=0?'+':'';
+    const cls=diff>0?'up':diff<0?'dn':'flat';
+    return rate?`<span class="${cls}">${sign}${diff.toFixed(2)}pp</span>`
+               :`<span class="${cls}">${sign}${(diff/Math.abs(b)*100).toFixed(1)}%</span>`;
+  };
+  return { hoc: hocEl(cv, yv, isRate) };
+}
+
 function renderAjkKpi(){
-  const cur = ajkWeeks[selAjkWeek];
-  const prev = selAjkWeek>0?ajkWeeks[selAjkWeek-1]:null;
-  const uvChg = prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
-  const connChg = prev?(cur.rate_total-prev.rate_total).toFixed(2):null;
+  // 始终取最新一周，不随选周联动
+  const cur = ajkWeeks[ajkWeeks.length-1];
+  const prev = ajkWeeks.length>1?ajkWeeks[ajkWeeks.length-2]:null;
+  const yoy = findWeekLastYear(ajkWeeks, cur);
+  const mkSub = (cv,pv,yv,isRate) => {
+    const hocStr = (a,b,rate) => {
+      if(a==null||b==null) return '--';
+      const diff=a-b, sign=diff>=0?'+':'', cls=diff>0?'up':diff<0?'dn':'flat';
+      return rate?`<span class="${cls}">${sign}${diff.toFixed(2)}pp</span>`
+                 :`<span class="${cls}">${sign}${(diff/Math.abs(b)*100).toFixed(1)}%</span>`;
+    };
+    return `周环比 ${hocStr(cv,pv?.value??pv,isRate)}<br>周同比 ${hocStr(cv,yv,isRate)}`;
+  };
   const kpis=[
-    {label:'日均UV',val:fmtW(cur.uv), sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
-    {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate), sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
-    {label:'有效连接数-新/vcuv',val:fmtPct(cur.rate_total), sub:prev?`环比 <span class="${(cur.rate_total-prev.rate_total)>=0?'up':'dn'}">${(cur.rate_total-prev.rate_total)>=0?'+':''}${(cur.rate_total-prev.rate_total).toFixed(2)}pp</span>`:'--'},
-    {label:'主动连接/vcuv',val:fmtPct(cur.rate_active), sub:prev?`环比 <span class="${(cur.rate_active-prev.rate_active)>=0?'up':'dn'}">${(cur.rate_active-prev.rate_active)>=0?'+':''}${(cur.rate_active-prev.rate_active).toFixed(2)}pp</span>`:'--'},
+    {label:'日均UV',      val:fmtW(cur.uv),         sub:mkSub(cur.uv,         prev?.uv,         yoy?.uv,         false)},
+    {label:'日均VCUV/UV', val:fmtPct(cur.vcuv_rate), sub:mkSub(cur.vcuv_rate,  prev?.vcuv_rate,  yoy?.vcuv_rate,  true)},
+    {label:'有效连接数-新/vcuv',val:fmtPct(cur.rate_total),sub:mkSub(cur.rate_total,prev?.rate_total,yoy?.rate_total,true)},
+    {label:'主动连接/vcuv',val:fmtPct(cur.rate_active),sub:mkSub(cur.rate_active,prev?.rate_active,yoy?.rate_active,true)},
   ];
-  document.getElementById('ajkKpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
+  document.getElementById('ajkKpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub" style="line-height:1.8">${k.sub}</div></div>`).join('');
 }
 
 function renderAjkCmp(){
-  let cur, prev;
+  let cur, prev, yoy=null;
   if(ajkCmpMode === 'month'){
     cur = ajkMonths[selAjkMonth];
     prev = selAjkMonth>0 ? ajkMonths[selAjkMonth-1] : null;
     if(!cur) return;
     document.getElementById('thCur').textContent = mLabelFull(cur.mo,cur.days);
     document.getElementById('thPrev').textContent = prev ? mLabelFull(prev.mo,prev.days) : '--';
+    document.getElementById('thYoy').textContent = '--';
   } else {
     cur = ajkWeeks[selAjkWeek];
     prev = selAjkWeek>0?ajkWeeks[selAjkWeek-1]:null;
+    yoy = findWeekLastYear(ajkWeeks, cur);
     if(!cur) return;
     document.getElementById('thCur').textContent = wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
     document.getElementById('thPrev').textContent = prev ? wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）' : '--';
+    document.getElementById('thYoy').textContent = yoy ? wLabel(yoy.week,yoy.days)+'（去年）' : '--';
   }
 
   const rows=[
@@ -836,15 +871,19 @@ function renderAjkCmp(){
   ];
 
   document.getElementById('ajkCmpBody').innerHTML = rows.map(r=>{
-    if(r.sep) return `<tr><td colspan="5" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
-    const cv=cur[r.key], pv=prev?prev[r.key]:null;
-    const chgParts = prev ? chgEl(cv,pv,r.isRate).split('|') : ['--','--'];
+    if(r.sep) return `<tr><td colspan="8" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
+    const cv=cur[r.key], pv=prev?prev[r.key]:null, yv=yoy?yoy[r.key]:null;
+    const hocParts = prev ? chgEl(cv,pv,r.isRate).split('|') : ['--','--'];
+    const yoyParts = yoy  ? chgEl(cv,yv,r.isRate).split('|') : ['--','--'];
     return `<tr>
       <td><span class="metric-name">${r.label}</span>${r.sub?`<br><span class="metric-sub">${r.sub}</span>`:''}</td>
       <td class="num">${r.fmt(cv)}</td>
       <td class="num">${prev?r.fmt(pv):'--'}</td>
-      <td class="num">${chgParts[0]}</td>
-      <td class="num">${chgParts[1]}</td>
+      <td class="num">${hocParts[0]}</td>
+      <td class="num">${hocParts[1]}</td>
+      <td class="num">${yoy?r.fmt(yv):'--'}</td>
+      <td class="num">${yoyParts[0]}</td>
+      <td class="num">${yoyParts[1]}</td>
     </tr>`;
   }).join('');
 }
