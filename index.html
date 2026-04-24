@@ -259,6 +259,7 @@ function checkPw(){
       <input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleW58Upload(event)">
     </label>
   </div>
+  <div id="w58KpiPeriod" style="font-size:11px;color:var(--muted);margin-bottom:6px;padding-left:2px"></div>
   <div class="kpi-row" id="w58Kpi"></div>
 
   <div class="section">
@@ -277,9 +278,12 @@ function checkPw(){
         <thead><tr>
           <th>指标</th>
           <th id="th58Cur">当前期</th>
-          <th id="th58Prev">上一期</th>
-          <th>变化</th>
-          <th>变化%</th>
+          <th id="th58Prev">环比期</th>
+          <th id="th58HocChg">环比变化</th>
+          <th id="th58HocPct">环比%</th>
+          <th id="th58Yoy">同比期</th>
+          <th id="th58YoyChg">同比变化</th>
+          <th id="th58YoyPct">同比%</th>
         </tr></thead>
         <tbody id="w58CmpBody"></tbody>
       </table>
@@ -1019,7 +1023,7 @@ function buildW58WeekNav(){
   nav.innerHTML = w58Weeks.slice(start).map((w,i)=>{
     const idx=start+i;
     const active = w58CmpMode==='week' && idx===selW58Week;
-    return `<button class="week-btn ${active?'active':''}" onclick="w58CmpMode='week';selW58Week=${idx};buildW58WeekNav();buildW58MonthNav();renderW58Kpi();renderW58Cmp();renderW58Charts()">${wLabel(w.week,w.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="w58CmpMode='week';selW58Week=${idx};buildW58WeekNav();buildW58MonthNav();renderW58Cmp();renderW58Charts()">${wLabel(w.week,w.days)}</button>`;
   }).join('');
 }
 
@@ -1035,31 +1039,60 @@ function buildW58MonthNav(){
 }
 
 function renderW58Kpi(){
-  const cur=w58Weeks[selW58Week], prev=selW58Week>0?w58Weeks[selW58Week-1]:null;
-  const uvChg=prev?((cur.uv-prev.uv)/prev.uv*100).toFixed(1):null;
-  const connChg=prev?(cur.conn_rate-prev.conn_rate).toFixed(2):null;
+  const cur = w58Weeks[w58Weeks.length-1];
+  if(!cur) return;
+  const prev = w58Weeks.length>1 ? w58Weeks[w58Weeks.length-2] : null;
+  const yoy = findWeekLastYear(w58Weeks, cur);
+
+  const periodEl = document.getElementById('w58KpiPeriod');
+  if(periodEl){
+    const curLbl = wLabel(cur.week, cur.days);
+    const prevLbl = prev ? wLabel(prev.week, prev.days) : '--';
+    periodEl.textContent = curLbl + ' vs ' + prevLbl;
+  }
+
+  const mkSub = (cv, pv, yv, isRate) => {
+    const hocStr = (a,b,rate) => {
+      if(a==null||b==null) return '--';
+      const diff=a-b, sign=diff>=0?'+':'', cls=diff>0?'up':diff<0?'dn':'flat';
+      return rate ? `<span class="${cls}">${sign}${diff.toFixed(2)}pp</span>`
+                  : `<span class="${cls}">${sign}${(diff/Math.abs(b)*100).toFixed(1)}%</span>`;
+    };
+    return `环比 ${hocStr(cv,pv,isRate)}<br>同比 ${hocStr(cv,yv,isRate)}`;
+  };
+
   const kpis=[
-    {label:'日均UV（APP+小程序）',val:fmtW(cur.uv),sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
-    {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate),sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
-    {label:'有效连接/vcuv',val:fmtPct(cur.conn_rate),sub:prev&&prev.conn_rate!=null?`环比 <span class="${(cur.conn_rate-prev.conn_rate)>=0?'up':'dn'}">${(cur.conn_rate-prev.conn_rate)>=0?'+':''}${(cur.conn_rate-prev.conn_rate).toFixed(2)}pp</span>`:'--'},
-    {label:'次日返回率',val:cur.retain_1d!=null?fmtPct(cur.retain_1d):'--',sub:prev&&prev.retain_1d!=null?`环比 <span class="${(cur.retain_1d-prev.retain_1d)>=0?'up':'dn'}">${(cur.retain_1d-prev.retain_1d)>=0?'+':''}${(cur.retain_1d-prev.retain_1d).toFixed(2)}pp</span>`:'--'},
+    {label:'日均UV（APP+小程序）', val:fmtW(cur.uv),         sub:mkSub(cur.uv,        prev?.uv,        yoy?.uv,        false)},
+    {label:'日均VCUV/UV',         val:fmtPct(cur.vcuv_rate), sub:mkSub(cur.vcuv_rate, prev?.vcuv_rate, yoy?.vcuv_rate, true)},
+    {label:'有效连接/vcuv',       val:fmtPct(cur.conn_rate), sub:mkSub(cur.conn_rate, prev?.conn_rate, yoy?.conn_rate, true)},
+    {label:'次日返回率',           val:cur.retain_1d!=null?fmtPct(cur.retain_1d):'--',
+                                   sub:mkSub(cur.retain_1d,  prev?.retain_1d, yoy?.retain_1d, true)},
   ];
-  document.getElementById('w58Kpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
+  document.getElementById('w58Kpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub" style="line-height:1.8">${k.sub}</div></div>`).join('');
 }
 
 function renderW58Cmp(){
-  let cur, prev;
+  let cur, prev, yoy=null;
+  const pfx = w58CmpMode==='month' ? '月' : '周';
+  document.getElementById('th58HocChg').textContent = pfx+'环比变化';
+  document.getElementById('th58HocPct').textContent = pfx+'环比%';
+  document.getElementById('th58YoyChg').textContent = pfx+'同比变化';
+  document.getElementById('th58YoyPct').textContent = pfx+'同比%';
+
   if(w58CmpMode==='month'){
     cur = w58Months[selW58Month];
     prev = selW58Month>0 ? w58Months[selW58Month-1] : null;
     if(!cur) return;
     document.getElementById('th58Cur').textContent = mLabelFull(cur.mo,cur.days);
     document.getElementById('th58Prev').textContent = prev ? mLabelFull(prev.mo,prev.days) : '--';
+    document.getElementById('th58Yoy').textContent = '--';
   } else {
-    cur=w58Weeks[selW58Week], prev=selW58Week>0?w58Weeks[selW58Week-1]:null;
+    cur=w58Weeks[selW58Week]; prev=selW58Week>0?w58Weeks[selW58Week-1]:null;
+    yoy = findWeekLastYear(w58Weeks, cur);
     if(!cur) return;
-    document.getElementById('th58Cur').textContent=wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
-    document.getElementById('th58Prev').textContent=prev ? wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）' : '--';
+    document.getElementById('th58Cur').textContent = wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
+    document.getElementById('th58Prev').textContent = prev ? wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）' : '--';
+    document.getElementById('th58Yoy').textContent = yoy ? wLabel(yoy.week,yoy.days)+'（去年）' : '--';
   }
 
   const rows=[
@@ -1068,16 +1101,27 @@ function renderW58Cmp(){
     {label:'VCUV/UV',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
     {label:'有效连接用户数',sub:'日均',key:'conn',fmt:v=>fmt(v,0)},
     {label:'有效连接/vcuv',key:'conn_rate',fmt:v=>fmtPct(v),isRate:true},
-    {label:'次日返回率',key:'retain_1d',fmt:v=>fmtPct(v),isRate:true},
+    {label:'次日返回率',key:'retain_1d',fmt:v=>v!=null?fmtPct(v):'--',isRate:true},
     {sep:true,label:'── APP vs 小程序'},
     {label:'APP-UV',sub:'日均',key:'uv_app',fmt:v=>fmtW(v)},
     {label:'小程序-UV',sub:'日均',key:'uv_mini',fmt:v=>fmtW(v)},
   ];
   document.getElementById('w58CmpBody').innerHTML = rows.map(r=>{
-    if(r.sep) return `<tr><td colspan="5" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
-    const cv=cur[r.key], pv=prev?prev[r.key]:null;
-    const chgParts=prev?chgEl(cv,pv,!!r.isRate).split('|'):['--','--'];
-    return `<tr><td class="metric-name">${r.label}</td><td class="num">${r.fmt(cv)}</td><td class="num">${prev?r.fmt(pv):'--'}</td><td class="num">${chgParts[0]}</td><td class="num">${chgParts[1]}</td></tr>`;
+    if(r.sep) return `<tr><td colspan="8" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
+    const cv=cur[r.key], pv=prev?prev[r.key]:null, yv=yoy?yoy[r.key]:null;
+    const hocParts=prev?chgEl(cv,pv,!!r.isRate).split('|'):['--','--'];
+    const yoyParts=yoy ?chgEl(cv,yv,!!r.isRate).split('|'):['--','--'];
+    const lbl = r.sub ? `<span class="metric-name">${r.label}</span><br><span class="metric-sub">${r.sub}</span>` : `<span class="metric-name">${r.label}</span>`;
+    return `<tr>
+      <td>${lbl}</td>
+      <td class="num">${r.fmt(cv)}</td>
+      <td class="num">${prev?r.fmt(pv):'--'}</td>
+      <td class="num">${hocParts[0]}</td>
+      <td class="num">${hocParts[1]}</td>
+      <td class="num">${yoy?r.fmt(yv):'--'}</td>
+      <td class="num">${yoyParts[0]}</td>
+      <td class="num">${yoyParts[1]}</td>
+    </tr>`;
   }).join('');
 }
 
