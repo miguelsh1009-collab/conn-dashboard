@@ -175,8 +175,8 @@ function checkPw(){
       <option value="全国">全国</option>
     </select>
     <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);margin-left:auto">
-      📂 上传 AJK xlsx
-      <input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleAjkUpload(event)">
+      📂 上传 AJK CSV
+      <input type="file" accept=".csv" style="display:none" onchange="handleAjkUpload(event)">
     </label>
   </div>
   <div class="kpi-row" id="ajkKpi"></div>
@@ -1472,7 +1472,103 @@ function parseW58Sheet(wb){
 }
 
 async function handleAjkUpload(event) {
-  return handleUpload(event);
+  const file = event.target.files[0];
+  if (!file) return;
+  showToast('正在解析AJK CSV…', false);
+  try {
+    const text = await file.text();
+    const ajkData = parseAjkCsv(text);
+    if (!ajkData) return;
+
+    const saveData = {ajk:ajkData, w58:rawW58, idle:rawIdle};
+    localStorage.setItem('conn_data', JSON.stringify(saveData));
+    rawAJK = ajkData;
+    updateDateLabel('ajk');
+
+    [chartAjkTrend,chartAjkUv,chartAjkConn,chartW58Uv,chartW58Conn,chartW58Dev,chartW58Retain,
+     chartIdleCnt,chartIdleVcuv,chartIdleLead].forEach(c=>c&&c.dispose());
+    chartAjkTrend=chartAjkUv=chartAjkConn=chartW58Uv=chartW58Conn=chartW58Dev=chartW58Retain=
+    chartIdleCnt=chartIdleVcuv=chartIdleLead=null;
+
+    renderAjk();
+    showToast(`AJK 解析完成：${ajkData.length}条`, false);
+    pushToGitHub(saveData);
+  } catch(e) {
+    console.error(e);
+    showToast('解析失败：'+e.message, true);
+  }
+  event.target.value = '';
+}
+
+function parseAjkCsv(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  let headerIdx = lines.findIndex(l => l.includes('日期') && l.includes('uv') && l.includes('vcuv'));
+  if (headerIdx < 0) { showToast('未找到有效CSV表头', true); return null; }
+  const headers = lines[headerIdx].match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,))/g)?.map(h => h.trim().replace(/^"|"$/g,'')) || [];
+  const rows = [];
+  const num = v => {
+    const raw = String(v ?? '').trim().replace(/,/g,'').replace('%','');
+    if (!raw) return null;
+    const parsed = +raw;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const normalizeDate = v => {
+    const raw = String(v ?? '').trim().replace(/^"|"$/g,'');
+    const m = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+    if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+    return raw;
+  };
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const vals = lines[i].match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,))/g) || [];
+    if (vals.length < headers.length) continue;
+    const row = {};
+    headers.forEach((h,j) => row[h] = (vals[j] || '').replace(/^"|"$/g,'').trim());
+    const date = normalizeDate(row['日期']);
+    const city = String(row['城市'] || '').trim();
+    const uv = num(row['uv']);
+    const vcuv = num(row['vcuv']);
+    if (!date || !city || (!uv && !vcuv)) continue;
+    const conn_total = num(row['有效连接数-新'] || row['有效连接数']);
+    const tel_conn = (num(row['400电话接通量']) || 0) + (num(row['分销电话接通量']) || 0);
+    const chat_eff = num(row['有效微聊对数']) || 0;
+    const view_conn = num(row['vr带看接通量'] || row['VR带看接通量']) || 0;
+    const active_conn = (num(row['主动连接']) ?? Math.round(tel_conn + chat_eff + view_conn)) || 0;
+    const conn_sub = num(row['新房订阅'] || row['关注订阅']);
+    const conn_ai = num(row['AI评测']);
+    const conn_3d = num(row['3D看房']);
+    const conn_broad = num(row['泛连接']);
+    const conn_video = num(row['视频评测']);
+    const rate = (n, d) => (d && n != null) ? +(n/d*100).toFixed(4) : null;
+    rows.push({
+      date,
+      city,
+      uv, vcuv,
+      vcpv: num(row['vcpv'] || row['VCPV']),
+      vcuv_rate: rate(vcuv, uv),
+      tel_conn: Math.round(tel_conn),
+      chat_eff,
+      view_conn: Math.round(view_conn),
+      active_conn: Math.round(active_conn),
+      conn_total,
+      conn_sub,
+      conn_ai,
+      conn_3d,
+      conn_broad,
+      conn_video,
+      rate_active: rate(active_conn, vcuv),
+      rate_tel_conn: rate(tel_conn, vcuv),
+      rate_chat_eff: rate(chat_eff, vcuv),
+      rate_view_conn: rate(view_conn, vcuv),
+      rate_total: rate(conn_total, vcuv),
+      rate_sub: rate(conn_sub, vcuv),
+      rate_ai: rate(conn_ai, vcuv),
+      rate_3d: rate(conn_3d, vcuv),
+      rate_broad: rate(conn_broad, vcuv),
+      rate_video: rate(conn_video, vcuv),
+    });
+  }
+  rows.sort((a,b)=> a.date===b.date ? String(a.city).localeCompare(String(b.city),'zh-CN') : a.date.localeCompare(b.date));
+  return rows;
 }
 
 async function handleW58Upload(event) {
