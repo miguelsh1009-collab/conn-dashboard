@@ -197,18 +197,24 @@ function checkPw(){
   </div>
   <div class="kpi-row" id="ajkKpi"></div>
 
-  <!-- 周对比 -->
+  <!-- 周/月对比 -->
   <div class="section">
-    <div class="section-hd">
-      <span class="section-title">周对比</span>
-      <div class="week-nav" id="ajkWeekNav"></div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:28px">周：</span>
+        <div class="week-nav" id="ajkWeekNav"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:28px">月：</span>
+        <div class="week-nav" id="ajkMonthNav"></div>
+      </div>
     </div>
     <div style="overflow-x:auto">
       <table class="cmp-table" id="ajkCmpTable">
         <thead><tr>
           <th>指标</th>
-          <th id="thCur">当前周</th>
-          <th id="thPrev">上一周</th>
+          <th id="thCur">当前期</th>
+          <th id="thPrev">上一期</th>
           <th>变化</th>
           <th>变化%</th>
         </tr></thead>
@@ -425,10 +431,11 @@ const CONN_TYPES = [
 ];
 
 let rawAJK=[], rawW58=[], rawIdle=[];
-let ajkWeeks=[], w58Weeks=[], idleWeeks=[], idleMonths=[];
-let selAjkWeek=0, selW58Week=0, selIdleWeek=0, selIdleMonth=0;
+let ajkWeeks=[], ajkMonths=[], w58Weeks=[], idleWeeks=[], idleMonths=[];
+let selAjkWeek=0, selAjkMonth=0, selW58Week=0, selIdleWeek=0, selIdleMonth=0;
 let ajkSelCity='全国';
 let idleSelCity='城市汇总';
+let ajkCmpMode='week';
 let activeTypes = new Set(['rate_total','rate_active']);
 let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
 let chartW58Uv=null, chartW58Conn=null, chartW58Dev=null, chartW58Retain=null;
@@ -547,6 +554,55 @@ function wLabel(weekStart, days){
   return weekStart||'';
 }
 
+function mLabelFull(month, days){
+  if(!month) return '--';
+  const [y,m] = month.split('-');
+  const dayCount = days?.length || 0;
+  return `${y.slice(2)}.${+m}月${dayCount?`（${dayCount}天）`:''}`;
+}
+
+function groupByMonth(daily){
+  const sorted = [...daily].filter(d=>d.date).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted.length) return [];
+  const map = {};
+  sorted.forEach(d => {
+    const mo = d.date.slice(0,7);
+    if(!map[mo]) map[mo] = {mo, days:[],
+      _uv:0,_vcuv:0,_vcpv:0,
+      _active_conn:0,_tel_conn:0,_chat_eff:0,_view_conn:0,
+      _conn_total:0,_conn_sub:0,_conn_ai:0,_conn_3d:0,_conn_broad:0,_conn_video:0};
+    const m = map[mo];
+    m.days.push(d.date);
+    if(d.uv) m._uv += d.uv;
+    if(d.vcuv) m._vcuv += d.vcuv;
+    if(d.vcpv) m._vcpv += d.vcpv;
+    ['active_conn','tel_conn','chat_eff','view_conn',
+     'conn_total','conn_sub','conn_ai','conn_3d','conn_broad','conn_video'].forEach(k=>{
+      if(d[k]) m['_'+k] += d[k];
+    });
+  });
+  return Object.values(map).sort((a,b)=>a.mo.localeCompare(b.mo)).map(m => {
+    const days = [...new Set(m.days)].sort();
+    const n = days.length || 1;
+    const avg = k => Math.round(m['_'+k] / n);
+    const uv = avg('uv'), vcuv = avg('vcuv'), vcpv = avg('vcpv');
+    const rate = k => vcuv ? +(avg(k)/vcuv*100).toFixed(4) : null;
+    return {
+      ...m,
+      days,
+      uv, vcuv, vcpv,
+      vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
+      vcpv_vcuv: vcuv ? +(vcpv/vcuv).toFixed(4) : null,
+      active_conn:avg('active_conn'), tel_conn:avg('tel_conn'), chat_eff:avg('chat_eff'), view_conn:avg('view_conn'),
+      conn_total:avg('conn_total'), conn_sub:avg('conn_sub'), conn_ai:avg('conn_ai'),
+      conn_3d:avg('conn_3d'), conn_broad:avg('conn_broad'), conn_video:avg('conn_video'),
+      rate_active:rate('active_conn'), rate_tel_conn:rate('tel_conn'), rate_chat_eff:rate('chat_eff'), rate_view_conn:rate('view_conn'),
+      rate_total:rate('conn_total'), rate_sub:rate('conn_sub'), rate_ai:rate('conn_ai'),
+      rate_3d:rate('conn_3d'), rate_broad:rate('conn_broad'), rate_video:rate('conn_video'),
+    };
+  });
+}
+
 // ── tab ──
 function updateDateLabel(name){
   let date='--';
@@ -635,8 +691,12 @@ function buildAjkTop5(){
 function renderAjk(){
   refreshAjkCitySelect();
   ajkWeeks = groupByWeek(ajkRowsForSelectedCity());
+  ajkMonths = groupByMonth(ajkRowsForSelectedCity());
   selAjkWeek = ajkWeeks.length-1;
+  selAjkMonth = ajkMonths.length-1;
+  ajkCmpMode = 'week';
   buildAjkWeekNav();
+  buildAjkMonthNav();
   renderAjkKpi();
   renderAjkCmp();
   buildAjkTypePills();
@@ -651,7 +711,19 @@ function buildAjkWeekNav(){
   const start = Math.max(0, ajkWeeks.length-8);
   nav.innerHTML = ajkWeeks.slice(start).map((w,i)=>{
     const idx = start+i;
-    return `<button class="week-btn ${idx===selAjkWeek?'active':''}" onclick="selAjkWeek=${idx};buildAjkWeekNav();renderAjkKpi();renderAjkCmp()">${wLabel(w.week,w.days)}</button>`;
+    const active = ajkCmpMode==='week' && idx===selAjkWeek;
+    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='week';selAjkWeek=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkKpi();renderAjkCmp()">${wLabel(w.week,w.days)}</button>`;
+  }).join('');
+}
+
+function buildAjkMonthNav(){
+  const nav = document.getElementById('ajkMonthNav');
+  if(!nav) return;
+  const start = Math.max(0, ajkMonths.length-6);
+  nav.innerHTML = ajkMonths.slice(start).map((m,i)=>{
+    const idx = start+i;
+    const active = ajkCmpMode==='month' && idx===selAjkMonth;
+    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='month';selAjkMonth=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp()">${mLabelFull(m.mo,m.days)}</button>`;
   }).join('');
 }
 
@@ -670,10 +742,20 @@ function renderAjkKpi(){
 }
 
 function renderAjkCmp(){
-  const cur = ajkWeeks[selAjkWeek];
-  const prev = selAjkWeek>0?ajkWeeks[selAjkWeek-1]:null;
-  document.getElementById('thCur').textContent = wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
-  if(prev) document.getElementById('thPrev').textContent = wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）';
+  let cur, prev;
+  if(ajkCmpMode === 'month'){
+    cur = ajkMonths[selAjkMonth];
+    prev = selAjkMonth>0 ? ajkMonths[selAjkMonth-1] : null;
+    if(!cur) return;
+    document.getElementById('thCur').textContent = mLabelFull(cur.mo,cur.days);
+    document.getElementById('thPrev').textContent = prev ? mLabelFull(prev.mo,prev.days) : '--';
+  } else {
+    cur = ajkWeeks[selAjkWeek];
+    prev = selAjkWeek>0?ajkWeeks[selAjkWeek-1]:null;
+    if(!cur) return;
+    document.getElementById('thCur').textContent = wLabel(cur.week,cur.days)+'（'+cur.days.length+'天）';
+    document.getElementById('thPrev').textContent = prev ? wLabel(prev.week,prev.days)+'（'+prev.days.length+'天）' : '--';
+  }
 
   const rows=[
     {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v),isRate:false},
