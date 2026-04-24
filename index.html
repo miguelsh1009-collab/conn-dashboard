@@ -232,16 +232,16 @@ function checkPw(){
     <div class="chart-area-lg" id="ajkTrendChart"></div>
   </div>
 
-  <!-- UV/VCUV趋势 -->
-  <div class="section">
-    <div class="section-hd"><span class="section-title">UV & VCUV/UV 趋势（周）</span></div>
-    <div class="chart-area" id="ajkUvChart"></div>
-  </div>
-
-  <!-- 总连接量趋势 -->
-  <div class="section">
-    <div class="section-hd"><span class="section-title">有效连接数-新 & 有效连接数-新/vcuv 趋势（周）</span></div>
-    <div class="chart-area" id="ajkConnVolChart"></div>
+  <!-- UV/VCUV趋势 & 总连接量趋势 -->
+  <div class="chart-row">
+    <div class="section">
+      <div class="section-hd"><span class="section-title" id="ajkUvTitle">UV & VCUV/UV 趋势（周）</span></div>
+      <div class="chart-area" id="ajkUvChart"></div>
+    </div>
+    <div class="section">
+      <div class="section-hd"><span class="section-title" id="ajkConnVolTitle">有效连接数-新 & 有效连接数-新/vcuv 趋势（周）</span></div>
+      <div class="chart-area" id="ajkConnVolChart"></div>
+    </div>
   </div>
 </div>
 
@@ -888,6 +888,7 @@ function renderAjkTrend(){
 function renderAjkConnVol(){
   if(!chartAjkConn) chartAjkConn = echarts.init(document.getElementById('ajkConnVolChart'));
   const isMonth = ajkCmpMode === 'month';
+  document.getElementById('ajkConnVolTitle').textContent = '有效连接数-新 & 有效连接数-新/vcuv 趋势（' + (isMonth?'月':'周') + '）';
   const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkConn.setOption({
@@ -910,6 +911,7 @@ function renderAjkConnVol(){
 function renderAjkUv(){
   if(!chartAjkUv) chartAjkUv = echarts.init(document.getElementById('ajkUvChart'));
   const isMonth = ajkCmpMode === 'month';
+  document.getElementById('ajkUvTitle').textContent = 'UV & VCUV/UV 趋势（' + (isMonth?'月':'周') + '）';
   const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkUv.setOption({
