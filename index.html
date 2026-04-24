@@ -289,10 +289,10 @@ function checkPw(){
       <div class="section-hd"><span class="section-title">VCUV/UV 周趋势</span></div>
       <div class="chart-area" id="w58VcuvUvChart"></div>
     </div>
-    <div class="section">
-      <div class="section-hd"><span class="section-title">有效连接/VCUV 周趋势</span></div>
-      <div class="chart-area" id="w58ConnRateChart"></div>
-    </div>
+  </div>
+  <div class="section">
+    <div class="section-hd"><span class="section-title">有效连接/VCUV 周趋势</span></div>
+    <div class="chart-area" id="w58ConnRateChart"></div>
   </div>
 
   <div class="chart-row">
@@ -529,7 +529,7 @@ function groupByWeek58(daily){
     const idx = Math.floor(diff/7);
     if(!map[idx]) map[idx] = {idx, days:[],
       _uv:0,_uv_app:0,_uv_mini:0,_vcuv:0,_conn:0,
-      _retain_sum:0,_retain_n:0};
+      _retain_sum:0,_retain_n:0,_retainDays:[]};
     const w = map[idx];
     w.days.push(d.date);
     w._uv      += d.uv||0;
@@ -537,7 +537,7 @@ function groupByWeek58(daily){
     w._uv_mini += d.uv_mini||0;
     w._vcuv    += d.vcuv||0;
     w._conn    += d.conn||0;
-    if(d.retain_1d!=null){ w._retain_sum += d.retain_1d; w._retain_n++; }
+    if(d.retain_1d!=null){ w._retain_sum += d.retain_1d; w._retain_n++; w._retainDays.push(d.date); }
   });
   return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w=>{
     const n = w.days.length;
@@ -545,11 +545,13 @@ function groupByWeek58(daily){
     const uv=avg('uv'), vcuv=avg('vcuv'), conn=avg('conn');
     const ds = w.days.slice().sort();
     w.week = ds[0]; w.weekEnd = ds[ds.length-1];
+    const retainExcluded = ds.filter(d=>!w._retainDays.includes(d));
     return { ...w,
       uv, uv_app:avg('uv_app'), uv_mini:avg('uv_mini'),
       vcuv, conn,
       vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
       conn_rate: vcuv ? +(conn/vcuv*100).toFixed(4) : null,
+      retainExcluded,
       retain_1d: w._retain_n >= 5 ? +(w._retain_sum/w._retain_n*100).toFixed(2) : null,
     };
   });
@@ -1075,13 +1077,19 @@ function renderW58Charts(){
   },true);
 
   // 次日返回率
+  const f = s => { const d=new Date(s+'T00:00:00'); return `${d.getMonth()+1}.${d.getDate()}`; };
+  const retainLabels = weeks.map(w => {
+    const base = wLabel(w.week, w.days);
+    if(!w.retainExcluded || !w.retainExcluded.length) return base;
+    return base + '\n(不含' + w.retainExcluded.map(f).join(',') + ')';
+  });
   if(!chartW58Retain) chartW58Retain = echarts.init(document.getElementById('w58RetainChart'));
   chartW58Retain.setOption({
     ...chartOpts(),
     tooltip: makeTip(()=>weeks, [{key:'retain_1d',isRate:true}], v=>v.toFixed(2)+'%'),
     legend:{data:['次日返回率(%)'],textStyle:{color:'#94a3b8'},top:0},
-    grid:{left:55,right:20,top:36,bottom:50},
-    xAxis:xAxis(labels),
+    grid:{left:55,right:20,top:36,bottom:65},
+    xAxis:{...xAxis(retainLabels), axisLabel:{color:'#6b7585',fontSize:10,rotate:30,interval:0}},
     yAxis:yAxis(v=>v+'%'),
     series:[{
       name:'次日返回率(%)',type:'line',smooth:true,
