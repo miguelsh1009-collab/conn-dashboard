@@ -61,7 +61,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .cmp-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;white-space:nowrap}
 .cmp-table tr:last-child td{border-bottom:none}
 .cmp-table tr:hover td{background:rgba(79,142,247,0.04)}
-.num{font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums;text-align:right}
+.cmp-table th:not(:first-child){text-align:right}
 .up{color:var(--danger)}.dn{color:var(--success)}.flat{color:var(--muted)}
 .metric-name{font-weight:500;color:var(--text)}
 .metric-sub{font-size:11px;color:var(--muted)}
@@ -868,7 +869,7 @@ function renderAjkCmp(){
     {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV/UV',sub:'率',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
-    {sep:true,label:'── 有效连接数-新'},
+    {label:'VCPV/VCUV',sub:'率',key:'vcpv_vcuv',fmt:v=>v==null?'--':v.toFixed(4),isRate:false},
     {label:'有效连接数-新',sub:'日均',key:'conn_total',fmt:v=>fmt(v,0),isRate:false},
     {label:'有效连接数-新/vcuv',key:'rate_total',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── 主动连接转化（/vcuv，接通口径）'},
