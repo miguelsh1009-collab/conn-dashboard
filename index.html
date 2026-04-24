@@ -38,7 +38,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .updated{color:var(--muted);font-size:12px;margin-left:auto}
 .upload-btn{padding:6px 16px;border-radius:6px;background:rgba(79,142,247,0.12);border:1px solid rgba(79,142,247,0.3);color:var(--accent);cursor:pointer;font-size:12px;white-space:nowrap;font-family:var(--font);transition:all .2s}
 .upload-btn:hover{background:rgba(79,142,247,0.22)}
-#fileInput{display:none}
 .upload-toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--text);z-index:999;display:none;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
 .container{max-width:1400px;margin:0 auto;padding:20px 28px}
 .page{display:none}.page.active{display:block}
@@ -132,8 +131,6 @@ function checkPw(){
   <a href="https://miguelsh1009-collab.github.io/anjuke-data-dashboard/" target="_blank" style="padding:6px 14px;border-radius:6px;background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap">城市数据看板 ↗</a>
   <button class="upload-btn" onclick="toggleSettings()" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);color:var(--muted)">⚙ 配置</button>
   <span id="pushStatus" style="font-size:11px;color:var(--muted);display:none"></span>
-  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传 AJK xlsx</button>
-  <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleAjkUpload(event)">
 </div>
 
 <!-- GitHub 配置面板 -->
@@ -171,6 +168,17 @@ function checkPw(){
 
 <!-- ══ AJK ══ -->
 <div class="page active" id="page-ajk">
+  <div style="margin-bottom:16px;padding:12px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
+    <select id="ajkCitySelect" onchange="selectAjkCity(this.value)"
+      style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:var(--font);cursor:pointer;min-width:120px">
+      <option value="全国">全国</option>
+    </select>
+    <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);margin-left:auto">
+      📂 上传 AJK xlsx
+      <input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleAjkUpload(event)">
+    </label>
+  </div>
   <div class="kpi-row" id="ajkKpi"></div>
 
   <!-- 周对比 -->
@@ -210,7 +218,7 @@ function checkPw(){
 
   <!-- 总连接量趋势 -->
   <div class="section">
-    <div class="section-hd"><span class="section-title">总连接量 & 总连接量/vcuv 趋势（周）</span></div>
+    <div class="section-hd"><span class="section-title">有效连接数-新 & 有效连接数-新/vcuv 趋势（周）</span></div>
     <div class="chart-area" id="ajkConnVolChart"></div>
   </div>
 </div>
@@ -388,11 +396,11 @@ function makeTip(weeksRef, seriesCfg, fmtFn) {
 // ── palette ──
 const COLORS = ['#6366f1','#22d3ee','#f59e0b','#ef4444','#34d399','#a78bfa','#fb923c','#60a5fa','#f472b6'];
 const CONN_TYPES = [
-  {key:'rate_total',     label:'总连接量',      color:'#6366f1'},
+  {key:'rate_total',     label:'有效连接数-新', color:'#6366f1'},
   {key:'rate_active',    label:'主动连接',       color:'#f59e0b'},
   {key:'rate_tel_conn',  label:'电话接通量',     color:'#22d3ee'},
   {key:'rate_chat_eff',  label:'有效微聊对数',   color:'#34d399'},
-  {key:'rate_view_conn', label:'带看接通量',     color:'#a78bfa'},
+  {key:'rate_view_conn', label:'VR带看接通量',   color:'#a78bfa'},
   {key:'rate_sub',       label:'关注订阅',       color:'#fb923c'},
   {key:'rate_ai',        label:'AI评测',         color:'#60a5fa'},
   {key:'rate_3d',        label:'3D看房',         color:'#f472b6'},
@@ -403,6 +411,7 @@ const CONN_TYPES = [
 let rawAJK=[], rawW58=[], rawIdle=[];
 let ajkWeeks=[], w58Weeks=[], idleWeeks=[], idleMonths=[];
 let selAjkWeek=0, selW58Week=0, selIdleWeek=0, selIdleMonth=0;
+let ajkSelCity='全国';
 let idleSelCity='城市汇总';
 let activeTypes = new Set(['rate_total','rate_active']);
 let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
@@ -440,8 +449,7 @@ function groupByWeek(daily){
     if(!map[idx]) map[idx] = {idx, days:[],
       _uv:0,_vcuv:0,_vcpv:0,
       _active_conn:0,_tel_conn:0,_chat_eff:0,_view_conn:0,
-      _conn_total:0,_conn_sub:0,_conn_ai:0,_conn_3d:0,_conn_broad:0,_conn_video:0,
-      _conn_computed:0};
+      _conn_total:0,_conn_sub:0,_conn_ai:0,_conn_3d:0,_conn_broad:0,_conn_video:0};
     const w = map[idx];
     w.days.push(d.date);
     if(d.uv)   w._uv   += d.uv;
@@ -451,8 +459,6 @@ function groupByWeek(daily){
      'conn_total','conn_sub','conn_ai','conn_3d','conn_broad','conn_video'].forEach(k=>{
       if(d[k]) w['_'+k] += d[k];
     });
-    // 新口径总连接 = 主动连接 + 其他
-    w._conn_computed += (d.active_conn||0) + (d.conn_sub||0) + (d.conn_ai||0) + (d.conn_3d||0) + (d.conn_broad||0) + (d.conn_video||0);
   });
   // sort descending by idx → oldest (high idx) first, newest (idx=0) last
   return Object.values(map).sort((a,b)=>b.idx-a.idx).map(w => {
@@ -469,11 +475,9 @@ function groupByWeek(daily){
       vcuv_rate: uv   ? +(vcuv/uv*100).toFixed(4) : null,
       vcpv_vcuv: vcuv ? +(vcpv/vcuv).toFixed(4)   : null,
       active_conn:avg('active_conn'), tel_conn:avg('tel_conn'), chat_eff:avg('chat_eff'), view_conn:avg('view_conn'),
-      conn_computed:avg('conn_computed'),
       conn_total:avg('conn_total'), conn_sub:avg('conn_sub'), conn_ai:avg('conn_ai'),
       conn_3d:avg('conn_3d'), conn_broad:avg('conn_broad'), conn_video:avg('conn_video'),
       rate_active:rate('active_conn'), rate_tel_conn:rate('tel_conn'), rate_chat_eff:rate('chat_eff'), rate_view_conn:rate('view_conn'),
-      rate_computed:rate('conn_computed'),
       rate_total:rate('conn_total'), rate_sub:rate('conn_sub'), rate_ai:rate('conn_ai'),
       rate_3d:rate('conn_3d'), rate_broad:rate('conn_broad'), rate_video:rate('conn_video'),
     };
@@ -549,8 +553,37 @@ function switchTab(name){
 }
 
 // ══ AJK ══
+function ajkAvailableCities(){
+  const cities = [...new Set((rawAJK||[]).map(d => d.city || '全国').filter(Boolean))];
+  const ordered = cities.filter(c => c !== '全国').sort((a,b)=>a.localeCompare(b,'zh-CN'));
+  return cities.includes('全国') ? ['全国', ...ordered] : ordered;
+}
+
+function refreshAjkCitySelect(){
+  const sel = document.getElementById('ajkCitySelect');
+  if (!sel) return;
+  const cities = ajkAvailableCities();
+  if (!cities.includes(ajkSelCity)) ajkSelCity = cities.includes('全国') ? '全国' : (cities[0] || '全国');
+  sel.innerHTML = cities.map(c => `<option value="${c}"${c===ajkSelCity?' selected':''}>${c}</option>`).join('');
+  sel.value = ajkSelCity;
+}
+
+function ajkRowsForSelectedCity(){
+  if (ajkSelCity === '全国') {
+    const nationalRows = rawAJK.filter(d => (d.city || '全国') === '全国');
+    return nationalRows.length ? nationalRows : rawAJK;
+  }
+  return rawAJK.filter(d => (d.city || '全国') === ajkSelCity);
+}
+
+function selectAjkCity(city){
+  ajkSelCity = city;
+  renderAjk();
+}
+
 function renderAjk(){
-  ajkWeeks = groupByWeek(rawAJK);
+  refreshAjkCitySelect();
+  ajkWeeks = groupByWeek(ajkRowsForSelectedCity());
   selAjkWeek = ajkWeeks.length-1;
   buildAjkWeekNav();
   renderAjkKpi();
@@ -579,7 +612,7 @@ function renderAjkKpi(){
   const kpis=[
     {label:'日均UV',val:fmtW(cur.uv), sub:prev?`环比 <span class="${(cur.uv-prev.uv)>=0?'up':'dn'}">${(cur.uv-prev.uv)>=0?'+':''}${((cur.uv-prev.uv)/prev.uv*100).toFixed(1)}%</span>`:'--'},
     {label:'日均VCUV/UV',val:fmtPct(cur.vcuv_rate), sub:prev?`环比 <span class="${(cur.vcuv_rate-prev.vcuv_rate)>=0?'up':'dn'}">${(cur.vcuv_rate-prev.vcuv_rate)>=0?'+':''}${(cur.vcuv_rate-prev.vcuv_rate).toFixed(2)}pp</span>`:'--'},
-    {label:'总连接/vcuv',val:fmtPct(cur.rate_total), sub:prev?`环比 <span class="${(cur.rate_total-prev.rate_total)>=0?'up':'dn'}">${(cur.rate_total-prev.rate_total)>=0?'+':''}${(cur.rate_total-prev.rate_total).toFixed(2)}pp</span>`:'--'},
+    {label:'有效连接数-新/vcuv',val:fmtPct(cur.rate_total), sub:prev?`环比 <span class="${(cur.rate_total-prev.rate_total)>=0?'up':'dn'}">${(cur.rate_total-prev.rate_total)>=0?'+':''}${(cur.rate_total-prev.rate_total).toFixed(2)}pp</span>`:'--'},
     {label:'主动连接/vcuv',val:fmtPct(cur.rate_active), sub:prev?`环比 <span class="${(cur.rate_active-prev.rate_active)>=0?'up':'dn'}">${(cur.rate_active-prev.rate_active)>=0?'+':''}${(cur.rate_active-prev.rate_active).toFixed(2)}pp</span>`:'--'},
   ];
   document.getElementById('ajkKpi').innerHTML = kpis.map(k=>`<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
@@ -595,14 +628,14 @@ function renderAjkCmp(){
     {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV/UV',sub:'率',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
-    {sep:true,label:'── 总连接量（主动连接 + 其他连接）'},
-    {label:'总连接量',sub:'日均',key:'conn_computed',fmt:v=>fmt(v,0),isRate:false},
-    {label:'总连接量/vcuv',key:'rate_computed',fmt:v=>fmtPct(v),isRate:true},
+    {sep:true,label:'── 有效连接数-新'},
+    {label:'有效连接数-新',sub:'日均',key:'conn_total',fmt:v=>fmt(v,0),isRate:false},
+    {label:'有效连接数-新/vcuv',key:'rate_total',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── 主动连接转化（/vcuv，接通口径）'},
     {label:'主动连接/vcuv',sub:'电话接通+微聊+带看接通',key:'rate_active',fmt:v=>fmtPct(v),isRate:true},
-    {label:'电话接通量/vcuv',sub:'售楼处+顾问+经纪人',key:'rate_tel_conn',fmt:v=>fmtPct(v),isRate:true},
+    {label:'电话接通量/vcuv',sub:'400电话接通量+分销电话接通量',key:'rate_tel_conn',fmt:v=>fmtPct(v),isRate:true},
     {label:'有效微聊对数/vcuv',key:'rate_chat_eff',fmt:v=>fmtPct(v),isRate:true},
-    {label:'带看接通量/vcuv',key:'rate_view_conn',fmt:v=>fmtPct(v),isRate:true},
+    {label:'VR带看接通量/vcuv',key:'rate_view_conn',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── 其他连接转化（/vcuv）'},
     {label:'关注订阅/vcuv',key:'rate_sub',fmt:v=>fmtPct(v),isRate:true},
     {label:'AI评测/vcuv',key:'rate_ai',fmt:v=>fmtPct(v),isRate:true},
@@ -613,7 +646,7 @@ function renderAjkCmp(){
     {label:'主动连接',sub:'日均',key:'active_conn',fmt:v=>fmt(v,0),isRate:false},
     {label:'电话接通量',sub:'日均',key:'tel_conn',fmt:v=>fmt(v,0),isRate:false},
     {label:'有效微聊对数',sub:'日均',key:'chat_eff',fmt:v=>fmt(v,0),isRate:false},
-    {label:'带看接通量',sub:'日均',key:'view_conn',fmt:v=>fmt(v,0),isRate:false},
+    {label:'VR带看接通量',sub:'日均',key:'view_conn',fmt:v=>fmt(v,0),isRate:false},
     {label:'视频评测',sub:'日均',key:'conn_video',fmt:v=>fmt(v,0),isRate:false},
   ];
 
@@ -673,8 +706,8 @@ function renderAjkConnVol(){
   const labels = weeks.map(w=>wLabel(w.week,w.days));
   chartAjkConn.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>ajkWeeks.slice(-26), [{key:'conn_computed',isRate:false},{key:'rate_computed',isRate:true}], (v,pi)=>pi===0?(v>9999?(v/10000).toFixed(1)+'万':v.toFixed(0)):v.toFixed(3)+'%'),
-    legend:{data:['总连接量（日均）','总连接量/vcuv(%)'],textStyle:{color:'#94a3b8'},top:0},
+    tooltip: makeTip(()=>ajkWeeks.slice(-26), [{key:'conn_total',isRate:false},{key:'rate_total',isRate:true}], (v,pi)=>pi===0?(v>9999?(v/10000).toFixed(1)+'万':v.toFixed(0)):v.toFixed(3)+'%'),
+    legend:{data:['有效连接数-新（日均）','有效连接数-新/vcuv(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:60,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
     yAxis:[
@@ -682,8 +715,8 @@ function renderAjkConnVol(){
       {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
     ],
     series:[
-      {name:'总连接量（日均）',type:'bar',data:weeks.map(w=>w.conn_computed),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'总连接量/vcuv(%)',type:'line',smooth:true,data:weeks.map(w=>w.rate_computed!=null?+w.rate_computed.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'有效连接数-新（日均）',type:'bar',data:weeks.map(w=>w.conn_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'有效连接数-新/vcuv(%)',type:'line',smooth:true,data:weeks.map(w=>w.rate_total!=null?+w.rate_total.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 }
@@ -1341,31 +1374,57 @@ function parseAjkSheet(wb){
   const ajkWs = wb.Sheets['ajk'];
   if (!ajkWs) { showToast('未找到 ajk sheet', true); return null; }
   const ajkRows = XLSX.utils.sheet_to_json(ajkWs, {header:1, raw:true});
+  const headers = (ajkRows[0] || []).map(v => String(v || '').trim());
+  const headerIndex = (...names) => {
+    for (const name of names) {
+      const idx = headers.findIndex(h => h === name);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+  const readByHeader = (row, names, fallbackIdx = -1) => {
+    const idx = headerIndex(...names);
+    if (idx !== -1) return row[idx];
+    return fallbackIdx >= 0 ? row[fallbackIdx] : null;
+  };
   const ajkData = [];
   for (let i = 1; i < ajkRows.length; i++) {
     const r = ajkRows[i];
-    const dateStr = formatDate(r[0]);
+    const dateStr = formatDate(readByHeader(r, ['日期','date'], 0));
     if (!dateStr || dateStr.length < 8) continue;
     const num = v => (v == null || v === '' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
-    const uv = num(r[1]), vcuv = num(r[2]), vcpv = num(r[3]);
+    const uv = num(readByHeader(r, ['uv','UV'], 1));
+    const vcuv = num(readByHeader(r, ['vcuv','VCUV'], 2));
+    const vcpv = num(readByHeader(r, ['vcpv','VCPV'], 3));
     if (!uv && !vcuv) continue;
-    const tel_dial = num(r[26]), tel_rate_ai = num(r[28]);
-    const adv_dial = num(r[29]), adv_rate = num(r[30]);
-    const brk_dial = num(r[31]), brk_rate = num(r[32]);
-    const view_cnt = num(r[12]), vr_rate = num(r[34]);
-    const tel_conn = (tel_dial||0)*(tel_rate_ai||0) + (adv_dial||0)*(adv_rate||0) + (brk_dial||0)*(brk_rate||0);
-    const view_conn = (view_cnt||0) * (vr_rate||0);
-    const chat_eff = num(r[10]) || 0;
+    const tel400Conn = num(readByHeader(r, ['400电话接通量'], -1));
+    const distTelConn = num(readByHeader(r, ['分销电话接通量'], -1));
+    const tel_dial = num(readByHeader(r, ['400电话拨打量'], 26));
+    const tel_rate_ai = num(readByHeader(r, ['400电话接通率'], 28));
+    const adv_dial = num(readByHeader(r, ['顾问电话拨打量'], 29));
+    const adv_rate = num(readByHeader(r, ['顾问电话接通率'], 30));
+    const brk_dial = num(readByHeader(r, ['分销电话拨打量'], 31));
+    const brk_rate = num(readByHeader(r, ['分销电话接通率'], 32));
+    const tel_conn = ((tel400Conn ?? ((tel_dial||0)*(tel_rate_ai||0))) || 0) + ((distTelConn ?? ((brk_dial||0)*(brk_rate||0))) || 0);
+    const view_cnt = num(readByHeader(r, ['vr带看量','VR带看量'], 12));
+    const vr_rate = num(readByHeader(r, ['vr带看接通率','VR带看接通率'], 34));
+    const view_conn = num(readByHeader(r, ['vr带看接通量','VR带看接通量'], -1)) ?? ((view_cnt||0) * (vr_rate||0));
+    const chat_eff = num(readByHeader(r, ['有效微聊对数'], 10)) || 0;
     const active_conn = Math.round(tel_conn + view_conn + chat_eff);
-    const conn_sub = num(r[11]), conn_ai = num(r[13]), conn_3d = num(r[14]);
-    const conn_broad = num(r[15]), conn_video = num(r[16]);
-    const conn_total = num(r[8]);
+    const conn_sub = num(readByHeader(r, ['关注订阅','新房订阅'], 11));
+    const conn_ai = num(readByHeader(r, ['AI评测'], 13));
+    const conn_3d = num(readByHeader(r, ['3D看房'], 14));
+    const conn_broad = num(readByHeader(r, ['泛连接'], 15));
+    const conn_video = num(readByHeader(r, ['视频评测'], 16));
+    const conn_total = num(readByHeader(r, ['有效连接数-新','有效连接数'], 8));
+    const city = String(readByHeader(r, ['城市','city'], -1) || '全国').trim() || '全国';
     const rate = (n, d) => (d && n != null) ? +(n/d*100).toFixed(4) : null;
     ajkData.push({
       date: dateStr,
+      city,
       uv, vcuv, vcpv,
       vcuv_rate: rate(vcuv, uv),
-      tel_conn: Math.round(tel_conn), chat_eff: num(r[10]), view_conn: Math.round(view_conn),
+      tel_conn: Math.round(tel_conn), chat_eff, view_conn: Math.round(view_conn),
       active_conn,
       conn_total, conn_sub, conn_ai, conn_3d, conn_broad, conn_video,
       rate_active: rate(active_conn, vcuv),
