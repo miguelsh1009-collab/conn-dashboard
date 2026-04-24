@@ -546,7 +546,7 @@ function groupByWeek58(daily){
       vcuv, conn,
       vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
       conn_rate: vcuv ? +(conn/vcuv*100).toFixed(4) : null,
-      retain_1d: w._retain_n ? +(w._retain_sum/w._retain_n*100).toFixed(2) : null,
+      retain_1d: w._retain_n >= 5 ? +(w._retain_sum/w._retain_n*100).toFixed(2) : null,
     };
   });
 }
@@ -582,7 +582,7 @@ function groupByMonth58(daily){
       conn, conn_app:avg('conn_app'), conn_mini:avg('conn_mini'),
       vcuv_rate: uv ? +(vcuv/uv*100).toFixed(4) : null,
       conn_rate: vcuv ? +(conn/vcuv*100).toFixed(4) : null,
-      retain_1d: m._retain_n ? +(m._retain_sum/m._retain_n*100).toFixed(2) : null,
+      retain_1d: m._retain_n >= 20 ? +(m._retain_sum/m._retain_n*100).toFixed(2) : null,
     };
   });
 }
