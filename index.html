@@ -469,13 +469,13 @@ function yAxis(fmt){ return {axisLabel:{color:'#6b7585',fontSize:11,formatter:fm
 function fmt(v,d=2){ return v==null?'--':Number(v).toLocaleString('zh-CN',{minimumFractionDigits:0,maximumFractionDigits:d}); }
 function fmtW(v){ return v==null?'--':(v/10000).toFixed(2)+'万'; }
 function fmtPct(v){ return v==null?'--':v.toFixed(2)+'%'; }
-function chgEl(cur,prev,isRate=false){
+function chgEl(cur,prev,isRate=false,dp=0){
   if(cur==null||prev==null) return '<span class="flat">--</span>';
   const diff = cur-prev;
   const pct = prev!==0 ? diff/Math.abs(prev)*100 : null;
   const cls = diff>0?'up':diff<0?'dn':'flat';
   const sign = diff>0?'+':'';
-  const diffStr = isRate ? `${sign}${diff.toFixed(2)}pp` : `${sign}${fmt(diff,0)}`;
+  const diffStr = isRate ? `${sign}${diff.toFixed(2)}pp` : `${sign}${fmt(diff,dp)}`;
   const pctStr = pct!=null ? `${sign}${pct.toFixed(1)}%` : '--';
   return `<span class="${cls}">${diffStr}</span>|<span class="${cls}">${pctStr}</span>`;
 }
@@ -873,7 +873,7 @@ function renderAjkCmp(){
     {label:'UV',sub:'日均',key:'uv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV',sub:'日均',key:'vcuv',fmt:v=>fmtW(v),isRate:false},
     {label:'VCUV/UV',sub:'率',key:'vcuv_rate',fmt:v=>fmtPct(v),isRate:true},
-    {label:'VCPV/VCUV',sub:'率',key:'vcpv_vcuv',fmt:v=>v==null?'--':v.toFixed(4),isRate:false},
+    {label:'VCPV/VCUV',sub:'率',key:'vcpv_vcuv',fmt:v=>v==null?'--':v.toFixed(4),isRate:false,diffDp:4},
     {label:'有效连接数-新',sub:'日均',key:'conn_total',fmt:v=>fmt(v,0),isRate:false},
     {label:'有效连接数-新/vcuv',key:'rate_total',fmt:v=>fmtPct(v),isRate:true},
     {sep:true,label:'── 主动连接转化（/vcuv，接通口径）'},
@@ -905,8 +905,8 @@ function renderAjkCmp(){
       ? `<tr><td colspan="8" style="padding:4px 12px 4px 24px;color:var(--muted);font-size:11px;opacity:0.6">${r.label}</td></tr>`
       : `<tr><td colspan="8" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
     const cv=cur[r.key], pv=prev?prev[r.key]:null, yv=yoy?yoy[r.key]:null;
-    const hocParts = prev ? chgEl(cv,pv,r.isRate).split('|') : ['--','--'];
-    const yoyParts = yoy  ? chgEl(cv,yv,r.isRate).split('|') : ['--','--'];
+    const hocParts = prev ? chgEl(cv,pv,r.isRate,r.diffDp||0).split('|') : ['--','--'];
+    const yoyParts = yoy  ? chgEl(cv,yv,r.isRate,r.diffDp||0).split('|') : ['--','--'];
     return `<tr>
       <td><span class="metric-name">${r.label}</span>${r.sub?`<br><span class="metric-sub">${r.sub}</span>`:''}</td>
       <td class="num">${r.fmt(cv)}</td>
