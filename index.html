@@ -168,16 +168,32 @@ function checkPw(){
 
 <!-- ══ AJK ══ -->
 <div class="page active" id="page-ajk">
-  <div style="margin-bottom:16px;padding:12px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
-    <select id="ajkCitySelect" onchange="selectAjkCity(this.value)"
-      style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:var(--font);cursor:pointer;min-width:120px">
-      <option value="全国">全国</option>
-    </select>
-    <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);margin-left:auto">
-      📂 上传 AJK CSV
-      <input type="file" accept=".csv" style="display:none" onchange="handleAjkUpload(event)">
-    </label>
+  <div style="margin-bottom:16px;padding:12px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted);white-space:nowrap">城市：</span>
+      <select id="ajkCitySelect" onchange="selectAjkCity(this.value)"
+        style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:var(--font);cursor:pointer;min-width:120px">
+        <option value="全国">全国</option>
+      </select>
+      <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);margin-left:auto">
+        📂 上传 AJK CSV
+        <input type="file" accept=".csv" style="display:none" onchange="handleAjkUpload(event)">
+      </label>
+    </div>
+    <div id="ajkTop5Row" style="display:none;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:130px">UV 日均TOP5：</span>
+        <div id="ajkTopUvBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:130px">VCUV/UV TOP5：</span>
+        <div id="ajkTopVcuvBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:130px">连接转化率TOP5：</span>
+        <div id="ajkTopConnBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+    </div>
   </div>
   <div class="kpi-row" id="ajkKpi"></div>
 
@@ -566,6 +582,7 @@ function refreshAjkCitySelect(){
   if (!cities.includes(ajkSelCity)) ajkSelCity = cities.includes('全国') ? '全国' : (cities[0] || '全国');
   sel.innerHTML = cities.map(c => `<option value="${c}"${c===ajkSelCity?' selected':''}>${c}</option>`).join('');
   sel.value = ajkSelCity;
+  buildAjkTop5();
 }
 
 function ajkRowsForSelectedCity(){
@@ -579,6 +596,40 @@ function ajkRowsForSelectedCity(){
 function selectAjkCity(city){
   ajkSelCity = city;
   renderAjk();
+}
+
+function buildAjkTop5(){
+  const row = document.getElementById('ajkTop5Row');
+  if (!row) return;
+  const cityRows = rawAJK.filter(d => d.city && d.city !== '全国');
+  const hasCities = [...new Set(cityRows.map(d => d.city))].length > 0;
+  if (!hasCities) { row.style.display = 'none'; return; }
+
+  const cityWeeks = [...new Set(cityRows.map(d => d.city))].map(city => {
+    const weeks = groupByWeek(cityRows.filter(d => d.city === city));
+    const latest = weeks[weeks.length - 1];
+    if (!latest) return null;
+    return {
+      city,
+      uv: latest.uv || 0,
+      vcuv_rate: latest.vcuv_rate || 0,
+      conn_rate: latest.rate_total || 0,
+    };
+  }).filter(Boolean);
+
+  if (!cityWeeks.length) { row.style.display = 'none'; return; }
+
+  const mkBtns = (sorted, key, formatter) => sorted.slice(0, 5).map(item => `
+    <button onclick="selectAjkCity('${item.city}')"
+      style="padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:${item.city===ajkSelCity?'var(--accent)':'var(--bg)'};
+      color:${item.city===ajkSelCity?'#fff':'var(--muted)'};font-size:12px;cursor:pointer;font-family:var(--font);white-space:nowrap">
+      ${item.city} <span style="font-size:11px;opacity:0.75">${formatter(item[key])}</span></button>
+  `).join('');
+
+  row.style.display = 'flex';
+  document.getElementById('ajkTopUvBtns').innerHTML = mkBtns([...cityWeeks].sort((a,b)=>b.uv-a.uv), 'uv', v => fmtW(v));
+  document.getElementById('ajkTopVcuvBtns').innerHTML = mkBtns([...cityWeeks].sort((a,b)=>b.vcuv_rate-a.vcuv_rate), 'vcuv_rate', v => fmtPct(v));
+  document.getElementById('ajkTopConnBtns').innerHTML = mkBtns([...cityWeeks].sort((a,b)=>b.conn_rate-a.conn_rate), 'conn_rate', v => fmtPct(v));
 }
 
 function renderAjk(){
