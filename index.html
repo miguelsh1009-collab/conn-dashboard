@@ -195,6 +195,7 @@ function checkPw(){
       </div>
     </div>
   </div>
+  <div id="ajkKpiPeriod" style="font-size:11px;color:var(--muted);margin-bottom:6px;padding-left:2px"></div>
   <div class="kpi-row" id="ajkKpi"></div>
 
   <!-- 周/月对比 -->
@@ -807,6 +808,12 @@ function renderAjkKpi(){
   const cur = ajkWeeks[ajkWeeks.length-1];
   const prev = ajkWeeks.length>1?ajkWeeks[ajkWeeks.length-2]:null;
   const yoy = findWeekLastYear(ajkWeeks, cur);
+  const periodEl = document.getElementById('ajkKpiPeriod');
+  if(periodEl){
+    const curLbl = wLabel(cur.week, cur.days);
+    const prevLbl = prev ? wLabel(prev.week, prev.days) : '--';
+    periodEl.textContent = curLbl + ' vs ' + prevLbl;
+  }
   const mkSub = (cv,pv,yv,isRate) => {
     const hocStr = (a,b,rate) => {
       if(a==null||b==null) return '--';
