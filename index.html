@@ -132,8 +132,8 @@ function checkPw(){
   <a href="https://miguelsh1009-collab.github.io/anjuke-data-dashboard/" target="_blank" style="padding:6px 14px;border-radius:6px;background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap">城市数据看板 ↗</a>
   <button class="upload-btn" onclick="toggleSettings()" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);color:var(--muted)">⚙ 配置</button>
   <span id="pushStatus" style="font-size:11px;color:var(--muted);display:none"></span>
-  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传 xlsx</button>
-  <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleUpload(event)">
+  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传 AJK xlsx</button>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleAjkUpload(event)">
 </div>
 
 <!-- GitHub 配置面板 -->
@@ -217,6 +217,12 @@ function checkPw(){
 
 <!-- ══ 58 ══ -->
 <div class="page" id="page-w58">
+  <div style="margin-bottom:16px;padding:12px 14px;background:var(--card);border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+    <label style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font)">
+      📂 上传58 xlsx
+      <input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleW58Upload(event)">
+    </label>
+  </div>
   <div class="kpi-row" id="w58Kpi"></div>
 
   <div class="section">
@@ -1306,81 +1312,12 @@ async function handleUpload(event) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, {type:'array'}); // raw serial numbers for dates — timezone-safe
 
-    // ── AJK sheet ──
-    const ajkWs = wb.Sheets['ajk'];
-    if (!ajkWs) { showToast('未找到 ajk sheet', true); return; }
-    const ajkRows = XLSX.utils.sheet_to_json(ajkWs, {header:1, raw:true});
-    const ajkData = [];
-    for (let i = 1; i < ajkRows.length; i++) {
-      const r = ajkRows[i];
-      const dateStr = formatDate(r[0]);
-      if (!dateStr || dateStr.length < 8) continue;
-      const num = v => (v == null || v === '' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
-      const uv = num(r[1]), vcuv = num(r[2]), vcpv = num(r[3]);
-      if (!uv && !vcuv) continue; // skip empty rows
-      const tel_dial = num(r[26]), tel_rate_ai = num(r[28]);
-      const adv_dial = num(r[29]), adv_rate   = num(r[30]);
-      const brk_dial = num(r[31]), brk_rate   = num(r[32]);
-      const view_cnt = num(r[12]), vr_rate     = num(r[34]);
-      const tel_conn  = (tel_dial||0)*(tel_rate_ai||0) + (adv_dial||0)*(adv_rate||0) + (brk_dial||0)*(brk_rate||0);
-      const view_conn = (view_cnt||0) * (vr_rate||0);
-      const chat_eff  = num(r[10]) || 0;
-      const active_conn = Math.round(tel_conn + view_conn + chat_eff);
-      const conn_sub = num(r[11]), conn_ai = num(r[13]), conn_3d = num(r[14]);
-      const conn_broad = num(r[15]), conn_video = num(r[16]);
-      const conn_total = num(r[8]);
-      const rate = (n, d) => (d && n != null) ? +(n/d*100).toFixed(4) : null;
-      ajkData.push({
-        date: dateStr,
-        uv, vcuv, vcpv,
-        vcuv_rate: rate(vcuv, uv),
-        tel_conn: Math.round(tel_conn), chat_eff: num(r[10]), view_conn: Math.round(view_conn),
-        active_conn,
-        conn_total, conn_sub, conn_ai, conn_3d, conn_broad, conn_video,
-        rate_active:   rate(active_conn, vcuv),
-        rate_tel_conn: rate(tel_conn, vcuv),
-        rate_chat_eff: rate(chat_eff, vcuv),
-        rate_view_conn:rate(view_conn, vcuv),
-        rate_total:    rate(conn_total, vcuv),
-        rate_sub:      rate(conn_sub, vcuv),
-        rate_ai:       rate(conn_ai, vcuv),
-        rate_3d:       rate(conn_3d, vcuv),
-        rate_broad:    rate(conn_broad, vcuv),
-        rate_video:    rate(conn_video, vcuv),
-      });
-    }
+    const ajkData = parseAjkSheet(wb);
+    if (!ajkData) return;
 
-    // ── 58 sheet ──
-    const w58Ws = wb.Sheets['58'];
-    if (!w58Ws) { showToast('未找到 58 sheet', true); return; }
-    const w58Rows = XLSX.utils.sheet_to_json(w58Ws, {header:1, raw:true});
-    const w58Data = [];
-    for (let i = 1; i < w58Rows.length; i++) {
-      const r = w58Rows[i];
-      const dateStr = formatDate(r[0]);
-      if (!dateStr || dateStr.length < 8) continue;
-      const num = v => (v == null || v === '' || v === 'NaN' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
-      const uv_app  = num(r[4]),  uv_mini  = num(r[5]);
-      const vcuv_app= num(r[11]), vcuv_mini= num(r[12]);
-      const conn_app= num(r[25]), conn_mini= num(r[26]);
-      const uv   = (uv_app||0)   + (uv_mini||0)   || null;
-      const vcuv = (vcuv_app||0) + (vcuv_mini||0) || null;
-      const conn = (conn_app||0) + (conn_mini||0) || null;
-      w58Data.push({
-        date: dateStr,
-        uv, uv_app, uv_mini,
-        vcuv, vcuv_app, vcuv_mini,
-        conn, conn_app, conn_mini,
-        vcuv_rate: (uv&&vcuv) ? +(vcuv/uv*100).toFixed(4) : null,
-        conn_rate: (vcuv&&conn) ? +(conn/vcuv*100).toFixed(4) : null,
-        retain_1d: num(r[30]),
-      });
-    }
-
-    // persist to localStorage + push to GitHub（闲置投放数据独立上传，不从xlsx读取）
-    const saveData={ajk:ajkData, w58:w58Data, idle:rawIdle};
+    const saveData={ajk:ajkData, w58:rawW58, idle:rawIdle};
     localStorage.setItem('conn_data', JSON.stringify(saveData));
-    rawAJK = ajkData; rawW58 = w58Data;
+    rawAJK = ajkData;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
 
@@ -1391,11 +1328,115 @@ async function handleUpload(event) {
     chartIdleCnt=chartIdleVcuv=chartIdleLead=null;
 
     renderAjk();
-    showToast(`解析完成：AJK ${ajkData.length}天，58 ${w58Data.length}天`, false);
+    showToast(`AJK 解析完成：${ajkData.length}天`, false);
     pushToGitHub(saveData);
   } catch(e) {
     console.error(e);
     showToast('解析失败：'+e.message, true);
+  }
+  event.target.value = '';
+}
+
+function parseAjkSheet(wb){
+  const ajkWs = wb.Sheets['ajk'];
+  if (!ajkWs) { showToast('未找到 ajk sheet', true); return null; }
+  const ajkRows = XLSX.utils.sheet_to_json(ajkWs, {header:1, raw:true});
+  const ajkData = [];
+  for (let i = 1; i < ajkRows.length; i++) {
+    const r = ajkRows[i];
+    const dateStr = formatDate(r[0]);
+    if (!dateStr || dateStr.length < 8) continue;
+    const num = v => (v == null || v === '' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
+    const uv = num(r[1]), vcuv = num(r[2]), vcpv = num(r[3]);
+    if (!uv && !vcuv) continue;
+    const tel_dial = num(r[26]), tel_rate_ai = num(r[28]);
+    const adv_dial = num(r[29]), adv_rate = num(r[30]);
+    const brk_dial = num(r[31]), brk_rate = num(r[32]);
+    const view_cnt = num(r[12]), vr_rate = num(r[34]);
+    const tel_conn = (tel_dial||0)*(tel_rate_ai||0) + (adv_dial||0)*(adv_rate||0) + (brk_dial||0)*(brk_rate||0);
+    const view_conn = (view_cnt||0) * (vr_rate||0);
+    const chat_eff = num(r[10]) || 0;
+    const active_conn = Math.round(tel_conn + view_conn + chat_eff);
+    const conn_sub = num(r[11]), conn_ai = num(r[13]), conn_3d = num(r[14]);
+    const conn_broad = num(r[15]), conn_video = num(r[16]);
+    const conn_total = num(r[8]);
+    const rate = (n, d) => (d && n != null) ? +(n/d*100).toFixed(4) : null;
+    ajkData.push({
+      date: dateStr,
+      uv, vcuv, vcpv,
+      vcuv_rate: rate(vcuv, uv),
+      tel_conn: Math.round(tel_conn), chat_eff: num(r[10]), view_conn: Math.round(view_conn),
+      active_conn,
+      conn_total, conn_sub, conn_ai, conn_3d, conn_broad, conn_video,
+      rate_active: rate(active_conn, vcuv),
+      rate_tel_conn: rate(tel_conn, vcuv),
+      rate_chat_eff: rate(chat_eff, vcuv),
+      rate_view_conn: rate(view_conn, vcuv),
+      rate_total: rate(conn_total, vcuv),
+      rate_sub: rate(conn_sub, vcuv),
+      rate_ai: rate(conn_ai, vcuv),
+      rate_3d: rate(conn_3d, vcuv),
+      rate_broad: rate(conn_broad, vcuv),
+      rate_video: rate(conn_video, vcuv),
+    });
+  }
+  return ajkData;
+}
+
+function parseW58Sheet(wb){
+  const w58Ws = wb.Sheets['58'];
+  if (!w58Ws) { showToast('未找到 58 sheet', true); return null; }
+  const w58Rows = XLSX.utils.sheet_to_json(w58Ws, {header:1, raw:true});
+  const w58Data = [];
+  for (let i = 1; i < w58Rows.length; i++) {
+    const r = w58Rows[i];
+    const dateStr = formatDate(r[0]);
+    if (!dateStr || dateStr.length < 8) continue;
+    const num = v => (v == null || v === '' || v === 'NaN' || (typeof v === 'string' && isNaN(+v))) ? null : +v;
+    const uv_app = num(r[4]), uv_mini = num(r[5]);
+    const vcuv_app = num(r[11]), vcuv_mini = num(r[12]);
+    const conn_app = num(r[25]), conn_mini = num(r[26]);
+    const uv = (uv_app||0) + (uv_mini||0) || null;
+    const vcuv = (vcuv_app||0) + (vcuv_mini||0) || null;
+    const conn = (conn_app||0) + (conn_mini||0) || null;
+    w58Data.push({
+      date: dateStr,
+      uv, uv_app, uv_mini,
+      vcuv, vcuv_app, vcuv_mini,
+      conn, conn_app, conn_mini,
+      vcuv_rate: (uv&&vcuv) ? +(vcuv/uv*100).toFixed(4) : null,
+      conn_rate: (vcuv&&conn) ? +(conn/vcuv*100).toFixed(4) : null,
+      retain_1d: num(r[30]),
+    });
+  }
+  return w58Data;
+}
+
+async function handleAjkUpload(event) {
+  return handleUpload(event);
+}
+
+async function handleW58Upload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  showToast('正在解析58数据…', false);
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const w58Data = parseW58Sheet(wb);
+    if (!w58Data) return;
+    const saveData = {ajk:rawAJK, w58:w58Data, idle:rawIdle};
+    localStorage.setItem('conn_data', JSON.stringify(saveData));
+    rawW58 = w58Data;
+    if (document.getElementById('page-w58').classList.contains('active')) {
+      renderW58();
+      updateDateLabel('w58');
+    }
+    showToast(`58 解析完成：${w58Data.length}天`, false);
+    pushToGitHub(saveData);
+  } catch(e) {
+    console.error(e);
+    showToast('58 解析失败：'+e.message, true);
   }
   event.target.value = '';
 }
