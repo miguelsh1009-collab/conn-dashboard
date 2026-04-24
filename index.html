@@ -123,8 +123,8 @@ function checkPw(){
     <span class="topbar-title">新房周数据看板</span>
   </div>
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('ajk')">安居客 AJK</button>
-    <button class="tab" onclick="switchTab('w58')">58同城</button>
+    <button class="tab active" onclick="switchTab('ajk')">AJK</button>
+    <button class="tab" onclick="switchTab('w58')">58</button>
     <button class="tab" onclick="switchTab('idle')">闲置投放</button>
   </div>
   <span class="updated" id="updatedText">加载中…</span>
@@ -655,6 +655,9 @@ function updateDateLabel(name){
   let date='--';
   if(name==='idle'){
     const sorted=[...rawIdle].filter(d=>d.date).sort((a,b)=>b.date.localeCompare(a.date));
+    date=sorted[0]?.date||'--';
+  } else if(name==='w58'){
+    const sorted=[...rawW58].filter(d=>d.date).sort((a,b)=>b.date.localeCompare(a.date));
     date=sorted[0]?.date||'--';
   } else {
     date=rawAJK[rawAJK.length-1]?.date||'--';
