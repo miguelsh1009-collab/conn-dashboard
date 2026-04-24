@@ -1476,7 +1476,8 @@ async function handleAjkUpload(event) {
   if (!file) return;
   showToast('正在解析AJK CSV…', false);
   try {
-    const text = await file.text();
+    const buf = await file.arrayBuffer();
+    const text = decodeAjkCsvBuffer(buf);
     const ajkData = parseAjkCsv(text);
     if (!ajkData) return;
 
@@ -1500,9 +1501,25 @@ async function handleAjkUpload(event) {
   event.target.value = '';
 }
 
+function decodeAjkCsvBuffer(buf){
+  const decoders = [
+    () => new TextDecoder('gb18030', {fatal:true}).decode(buf),
+    () => new TextDecoder('gbk', {fatal:true}).decode(buf),
+    () => new TextDecoder('utf-8', {fatal:true}).decode(buf),
+    () => new TextDecoder().decode(buf),
+  ];
+  for (const decode of decoders) {
+    try {
+      const text = decode();
+      if (text.includes('日期') && text.includes('城市') && text.includes('uv')) return text;
+    } catch (e) {}
+  }
+  return new TextDecoder().decode(buf);
+}
+
 function parseAjkCsv(text){
   const lines = text.split(/\r?\n/).filter(l => l.trim());
-  let headerIdx = lines.findIndex(l => l.includes('日期') && l.includes('uv') && l.includes('vcuv'));
+  let headerIdx = lines.findIndex(l => l.includes('日期') && l.includes('城市') && l.includes('uv') && l.includes('vcuv'));
   if (headerIdx < 0) { showToast('未找到有效CSV表头', true); return null; }
   const headers = lines[headerIdx].match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,))/g)?.map(h => h.trim().replace(/^"|"$/g,'')) || [];
   const rows = [];
