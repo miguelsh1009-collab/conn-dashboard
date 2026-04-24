@@ -181,6 +181,7 @@ function checkPw(){
       </label>
     </div>
     <div id="ajkTop5Row" style="display:none;flex-direction:column;gap:8px">
+      <div id="ajkTop5Period" style="font-size:11px;color:var(--muted)"></div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--muted);white-space:nowrap;width:130px">UV 日均TOP5：</span>
         <div id="ajkTopUvBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
@@ -737,6 +738,12 @@ function buildAjkTop5(){
       color:${item.city===ajkSelCity?'#fff':'var(--muted)'};font-size:12px;cursor:pointer;font-family:var(--font);white-space:nowrap">
       ${item.city} <span style="font-size:11px;opacity:0.75">${formatter(item[key])}</span></button>
   `).join('');
+
+  // 取全国最新周的时间范围作为说明
+  const nationalWeeks = groupByWeek(rawAJK.filter(d => d.city === '全国' || !d.city));
+  const latestWeek = nationalWeeks.length ? nationalWeeks[nationalWeeks.length-1] : (cityWeeks[0] ? groupByWeek(cityRows.filter(d=>d.city===cityWeeks[0].city))[0] : null);
+  const periodEl = document.getElementById('ajkTop5Period');
+  if(periodEl && latestWeek) periodEl.textContent = '数据区间：' + wLabel(latestWeek.week, latestWeek.days);
 
   row.style.display = 'flex';
   document.getElementById('ajkTopUvBtns').innerHTML = mkBtns([...cityWeeks].sort((a,b)=>b.uv-a.uv), 'uv', v => fmtW(v));
