@@ -876,22 +876,29 @@ function renderAjkCmp(){
     {label:'电话接通量/vcuv',sub:'400电话接通量+分销电话接通量',key:'rate_tel_conn',fmt:v=>fmtPct(v),isRate:true},
     {label:'有效微聊对数/vcuv',key:'rate_chat_eff',fmt:v=>fmtPct(v),isRate:true},
     {label:'VR带看接通量/vcuv',key:'rate_view_conn',fmt:v=>fmtPct(v),isRate:true},
+    {sep:true,label:'　　绝对量（日均）',sub2:true},
+    {label:'主动连接',sub:'日均',key:'active_conn',fmt:v=>fmt(v,0),isRate:false},
+    {label:'电话接通量',sub:'日均',key:'tel_conn',fmt:v=>fmt(v,0),isRate:false},
+    {label:'有效微聊对数',sub:'日均',key:'chat_eff',fmt:v=>fmt(v,0),isRate:false},
+    {label:'VR带看接通量',sub:'日均',key:'view_conn',fmt:v=>fmt(v,0),isRate:false},
     {sep:true,label:'── 其他连接转化（/vcuv）'},
     {label:'关注订阅/vcuv',key:'rate_sub',fmt:v=>fmtPct(v),isRate:true},
     {label:'AI评测/vcuv',key:'rate_ai',fmt:v=>fmtPct(v),isRate:true},
     {label:'3D看房/vcuv',key:'rate_3d',fmt:v=>fmtPct(v),isRate:true},
     {label:'泛连接/vcuv',key:'rate_broad',fmt:v=>fmtPct(v),isRate:true},
     {label:'视频评测/vcuv',key:'rate_video',fmt:v=>fmtPct(v),isRate:true},
-    {sep:true,label:'── 绝对量（日均）'},
-    {label:'主动连接',sub:'日均',key:'active_conn',fmt:v=>fmt(v,0),isRate:false},
-    {label:'电话接通量',sub:'日均',key:'tel_conn',fmt:v=>fmt(v,0),isRate:false},
-    {label:'有效微聊对数',sub:'日均',key:'chat_eff',fmt:v=>fmt(v,0),isRate:false},
-    {label:'VR带看接通量',sub:'日均',key:'view_conn',fmt:v=>fmt(v,0),isRate:false},
+    {sep:true,label:'　　绝对量（日均）',sub2:true},
+    {label:'关注订阅',sub:'日均',key:'conn_sub',fmt:v=>fmt(v,0),isRate:false},
+    {label:'AI评测',sub:'日均',key:'conn_ai',fmt:v=>fmt(v,0),isRate:false},
+    {label:'3D看房',sub:'日均',key:'conn_3d',fmt:v=>fmt(v,0),isRate:false},
+    {label:'泛连接',sub:'日均',key:'conn_broad',fmt:v=>fmt(v,0),isRate:false},
     {label:'视频评测',sub:'日均',key:'conn_video',fmt:v=>fmt(v,0),isRate:false},
   ];
 
   document.getElementById('ajkCmpBody').innerHTML = rows.map(r=>{
-    if(r.sep) return `<tr><td colspan="8" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
+    if(r.sep) return r.sub2
+      ? `<tr><td colspan="8" style="padding:4px 12px 4px 24px;color:var(--muted);font-size:11px;opacity:0.6">${r.label}</td></tr>`
+      : `<tr><td colspan="8" style="padding:8px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,.2)">${r.label}</td></tr>`;
     const cv=cur[r.key], pv=prev?prev[r.key]:null, yv=yoy?yoy[r.key]:null;
     const hocParts = prev ? chgEl(cv,pv,r.isRate).split('|') : ['--','--'];
     const yoyParts = yoy  ? chgEl(cv,yv,r.isRate).split('|') : ['--','--'];
