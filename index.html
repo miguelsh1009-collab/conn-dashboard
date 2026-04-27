@@ -1973,44 +1973,34 @@ async function loadData(){
     renderAjk();
   }
 
-  // 1. GitHub API 实时拉取（有 Token 时，无 CDN 延迟）
-  if(token && user && repo){
-    try{
-      const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/data/data.json`;
-      const res = await fetch(apiUrl, {headers:{Authorization:`token ${token}`,Accept:'application/vnd.github+json'}});
-      if(res.ok){
-        const j = await res.json();
-        const d = JSON.parse(atob(j.content.replace(/\n/g,'')));
-        if(d.ajk && d.ajk.length){ applyData(d); return; }
-      }
-    }catch(_){}
+  // 并行 fetch 两个文件，合并成 {ajk, idle}
+  async function fetchTwo(ajkUrl, idleUrl, headers){
+    const [rAjk, rIdle] = await Promise.all([
+      fetch(ajkUrl, {cache:'no-store', ...(headers?{headers}:{})}),
+      fetch(idleUrl, {cache:'no-store', ...(headers?{headers}:{})})
+    ]);
+    if(!rAjk.ok || !rIdle.ok) return null;
+    const [ajk, idle] = await Promise.all([rAjk.json(), rIdle.json()]);
+    return {ajk, idle, w58:[]};
   }
 
-  // 2. localStorage 优先（无 Token 时本地缓存）
-  const cached = localStorage.getItem('conn_data');
-  if (cached) {
-    try {
-      const d = JSON.parse(cached);
-      if (d.ajk && d.ajk.length) { applyData(d); return; }
-    } catch(e) { localStorage.removeItem('conn_data'); }
-  }
+  const t = Math.floor(Date.now()/60000);
+  const base = `https://${user}.github.io/${repo}`;
 
-  // 3. GitHub Pages CDN（无 Token 的其他用户）
+  // 1. GitHub Pages CDN 并行加载（主路径）
   try{
-    const cdnUrl = `https://${user}.github.io/${repo}/data/data.json?t=${Math.floor(Date.now()/60000)}`;
-    const res = await fetch(cdnUrl, {cache:'no-store'});
-    if(res.ok){
-      const d = await res.json();
-      if(d.ajk && d.ajk.length){ applyData(d); return; }
-    }
+    const d = await fetchTwo(
+      `${base}/data/ajk.json?t=${t}`,
+      `${base}/data/idle.json?t=${t}`
+    );
+    if(d && d.ajk && d.ajk.length){ applyData(d); return; }
   }catch(_){}
 
-  // 4. 兜底：相对路径
+  // 2. 兜底：相对路径并行加载
   try{
-    const res = await fetch('./data/data.json?t='+Date.now());
-    const d = await res.json();
-    if(d.ajk && d.ajk.length){ applyData(d); return; }
-  } catch(e){
+    const d = await fetchTwo(`./data/ajk.json?t=${Date.now()}`, `./data/idle.json?t=${Date.now()}`);
+    if(d && d.ajk && d.ajk.length){ applyData(d); return; }
+  }catch(e){
     console.error(e);
     document.getElementById('updatedText').textContent = '加载失败';
   }
