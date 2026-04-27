@@ -683,7 +683,7 @@ function switchTab(name){
   document.getElementById('page-'+name).classList.add('active');
   updateDateLabel(name);
   if(name==='w58')  setTimeout(()=>renderW58(),60);
-  if(name==='idle') setTimeout(()=>renderIdle(),60);
+  if(name==='idle') loadIdleData().then(()=>setTimeout(()=>renderIdle(),60));
 }
 
 // ══ AJK ══
@@ -1962,48 +1962,54 @@ async function handleW58Upload(event) {
 }
 
 // ── load ──
+let idleLoaded = false;
+
+async function fetchJson(url){
+  const r = await fetch(url, {cache:'no-store'});
+  if(!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+async function loadIdleData(){
+  if(idleLoaded) return;
+  const {user, repo} = getGHConfig();
+  const urls = [
+    `https://raw.githubusercontent.com/${user}/${repo}/main/data/idle.json`,
+    `https://${user}.github.io/${repo}/data/idle.json`,
+    `./data/idle.json`
+  ];
+  for(const url of urls){
+    try{
+      const idle = await fetchJson(url);
+      if(idle && idle.length){ rawIdle = idle; idleLoaded = true; return; }
+    }catch(_){}
+  }
+}
+
 async function loadData(){
   loadSettings();
-  const {user, repo, token} = getGHConfig();
+  const {user, repo} = getGHConfig();
+  document.getElementById('updatedText').textContent = '加载中…';
 
-  function applyData(d){
-    rawAJK = d.ajk; rawW58 = d.w58||[]; rawIdle = d.idle||[];
-    const lastDate = rawAJK[rawAJK.length-1]?.date || '--';
-    document.getElementById('updatedText').textContent = '数据至：'+lastDate;
-    renderAjk();
+  const urls = [
+    `https://raw.githubusercontent.com/${user}/${repo}/main/data/ajk.json`,
+    `https://${user}.github.io/${repo}/data/ajk.json`,
+    `./data/ajk.json`
+  ];
+
+  for(const url of urls){
+    try{
+      const ajk = await fetchJson(url);
+      if(ajk && ajk.length){
+        rawAJK = ajk;
+        const lastDate = rawAJK[rawAJK.length-1]?.date || '--';
+        document.getElementById('updatedText').textContent = '数据至：'+lastDate;
+        renderAjk();
+        return;
+      }
+    }catch(_){}
   }
-
-  // 并行 fetch 两个文件，合并成 {ajk, idle}
-  async function fetchTwo(ajkUrl, idleUrl, headers){
-    const [rAjk, rIdle] = await Promise.all([
-      fetch(ajkUrl, {cache:'no-store', ...(headers?{headers}:{})}),
-      fetch(idleUrl, {cache:'no-store', ...(headers?{headers}:{})})
-    ]);
-    if(!rAjk.ok || !rIdle.ok) return null;
-    const [ajk, idle] = await Promise.all([rAjk.json(), rIdle.json()]);
-    return {ajk, idle, w58:[]};
-  }
-
-  const t = Math.floor(Date.now()/60000);
-  const base = `https://${user}.github.io/${repo}`;
-
-  // 1. GitHub Pages CDN 并行加载（主路径）
-  try{
-    const d = await fetchTwo(
-      `${base}/data/ajk.json?t=${t}`,
-      `${base}/data/idle.json?t=${t}`
-    );
-    if(d && d.ajk && d.ajk.length){ applyData(d); return; }
-  }catch(_){}
-
-  // 2. 兜底：相对路径并行加载
-  try{
-    const d = await fetchTwo(`./data/ajk.json?t=${Date.now()}`, `./data/idle.json?t=${Date.now()}`);
-    if(d && d.ajk && d.ajk.length){ applyData(d); return; }
-  }catch(e){
-    console.error(e);
-    document.getElementById('updatedText').textContent = '加载失败';
-  }
+  document.getElementById('updatedText').textContent = '加载失败';
 }
 
 loadData();
