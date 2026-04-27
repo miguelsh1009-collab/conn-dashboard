@@ -682,7 +682,7 @@ function switchTab(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   updateDateLabel(name);
-  if(name==='w58')  setTimeout(()=>renderW58(),60);
+  if(name==='w58')  loadW58Data().then(()=>setTimeout(()=>renderW58(),60));
   if(name==='idle') loadIdleData().then(()=>setTimeout(()=>renderIdle(),60));
 }
 
@@ -1646,14 +1646,17 @@ function setGHStatus(msg,ok=true){
 async function pushToGitHub(data){
   const{user,repo,token}=getGHConfig();
   if(!token){setGHStatus('⚠ 未配置Token，数据仅本地可见',false);return;}
+  // 只推 w58 数据（ajk/idle 由自动脚本更新）
+  const w58Data = data.w58 || rawW58;
+  if(!w58Data || !w58Data.length) return;
   setGHStatus('正在同步到GitHub…',true);
   try{
-    const apiUrl=`https://api.github.com/repos/${user}/${repo}/contents/data/data.json`;
+    const apiUrl=`https://api.github.com/repos/${user}/${repo}/contents/data/w58.json`;
     const headers={Authorization:`token ${token}`,Accept:'application/vnd.github+json','Content-Type':'application/json'};
     let sha='';
     try{const r=await fetch(apiUrl,{headers});if(r.ok){const j=await r.json();sha=j.sha||'';}}catch(_){}
-    const content=btoa(unescape(encodeURIComponent(JSON.stringify(data,null,0))));
-    const body={message:`chore: 更新数据 ${new Date().toLocaleDateString('zh-CN')}`,content};
+    const content=btoa(unescape(encodeURIComponent(JSON.stringify(w58Data,null,0))));
+    const body={message:`chore: 更新58数据 ${new Date().toLocaleDateString('zh-CN')}`,content};
     if(sha)body.sha=sha;
     const res=await fetch(apiUrl,{method:'PUT',headers,body:JSON.stringify(body)});
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
@@ -1963,6 +1966,7 @@ async function handleW58Upload(event) {
 
 // ── load ──
 let idleLoaded = false;
+let w58Loaded = false;
 
 async function fetchJson(url){
   const r = await fetch(url, {cache:'no-store'});
@@ -1982,6 +1986,22 @@ async function loadIdleData(){
     try{
       const idle = await fetchJson(url);
       if(idle && idle.length){ rawIdle = idle; idleLoaded = true; return; }
+    }catch(_){}
+  }
+}
+
+async function loadW58Data(){
+  if(w58Loaded) return;
+  const {user, repo} = getGHConfig();
+  const urls = [
+    `https://raw.githubusercontent.com/${user}/${repo}/main/data/w58.json`,
+    `https://${user}.github.io/${repo}/data/w58.json`,
+    `./data/w58.json`
+  ];
+  for(const url of urls){
+    try{
+      const w58 = await fetchJson(url);
+      if(w58 && w58.length){ rawW58 = w58; w58Loaded = true; return; }
     }catch(_){}
   }
 }
