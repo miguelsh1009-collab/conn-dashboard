@@ -802,6 +802,12 @@ function findWeekLastYear(weeks, cur){
     return (!best||d<Math.abs(new Date(best.week+'T00:00:00').getTime()-t))?w:best;
   }, null);
 }
+function findMonthLastYear(months, cur){
+  // cur.mo like "2025-04", look for "2024-04"
+  const [y, m] = cur.mo.split('-');
+  const target = `${+y-1}-${m}`;
+  return months.find(w => w.mo === target) || null;
+}
 
 function kpiChg(cur, yoy, key, isRate){
   const cv = cur[key], yv = yoy?.[key];
@@ -855,10 +861,11 @@ function renderAjkCmp(){
   if(ajkCmpMode === 'month'){
     cur = ajkMonths[selAjkMonth];
     prev = selAjkMonth>0 ? ajkMonths[selAjkMonth-1] : null;
+    yoy = cur ? findMonthLastYear(ajkMonths, cur) : null;
     if(!cur) return;
     document.getElementById('thCur').textContent = mLabelFull(cur.mo,cur.days);
     document.getElementById('thPrev').textContent = prev ? mLabelFull(prev.mo,prev.days) : '--';
-    document.getElementById('thYoy').textContent = '--';
+    document.getElementById('thYoy').textContent = yoy ? mLabelFull(yoy.mo,yoy.days)+'（去年）' : '--';
   } else {
     cur = ajkWeeks[selAjkWeek];
     prev = selAjkWeek>0?ajkWeeks[selAjkWeek-1]:null;
@@ -1082,10 +1089,11 @@ function renderW58Cmp(){
   if(w58CmpMode==='month'){
     cur = w58Months[selW58Month];
     prev = selW58Month>0 ? w58Months[selW58Month-1] : null;
+    yoy = cur ? findMonthLastYear(w58Months, cur) : null;
     if(!cur) return;
     document.getElementById('th58Cur').textContent = mLabelFull(cur.mo,cur.days);
     document.getElementById('th58Prev').textContent = prev ? mLabelFull(prev.mo,prev.days) : '--';
-    document.getElementById('th58Yoy').textContent = '--';
+    document.getElementById('th58Yoy').textContent = yoy ? mLabelFull(yoy.mo,yoy.days)+'（去年）' : '--';
   } else {
     cur=w58Weeks[selW58Week]; prev=selW58Week>0?w58Weeks[selW58Week-1]:null;
     yoy = findWeekLastYear(w58Weeks, cur);
