@@ -232,7 +232,7 @@ function checkPw(){
   <!-- 连接类型趋势 -->
   <div class="section">
     <div class="section-hd">
-      <span class="section-title">各连接类型 /vcuv 周趋势</span>
+      <span class="section-title" id="ajkTrendTitle">各类型连接量 & 各连接类型 /vcuv 趋势（周）</span>
       <div class="type-pills" id="ajkTypePills"></div>
     </div>
     <div class="chart-area-lg" id="ajkTrendChart"></div>
@@ -438,16 +438,16 @@ function makeTip(weeksRef, seriesCfg, fmtFn) {
 // ── palette ──
 const COLORS = ['#6366f1','#22d3ee','#f59e0b','#ef4444','#34d399','#a78bfa','#fb923c','#60a5fa','#f472b6'];
 const CONN_TYPES = [
-  {key:'rate_total',     label:'有效连接数-新', color:'#6366f1'},
-  {key:'rate_active',    label:'主动连接',       color:'#f59e0b'},
-  {key:'rate_tel_conn',  label:'电话接通量',     color:'#22d3ee'},
-  {key:'rate_chat_eff',  label:'有效微聊对数',   color:'#34d399'},
-  {key:'rate_view_conn', label:'VR带看接通量',   color:'#a78bfa'},
-  {key:'rate_sub',       label:'关注订阅',       color:'#fb923c'},
-  {key:'rate_ai',        label:'AI评测',         color:'#60a5fa'},
-  {key:'rate_3d',        label:'3D看房',         color:'#f472b6'},
-  {key:'rate_broad',     label:'泛连接',         color:'#94a3b8'},
-  {key:'rate_video',     label:'视频评测',       color:'#ef4444'},
+  {key:'rate_total',     vol:'conn_total',   label:'有效连接数-新', color:'#6366f1'},
+  {key:'rate_active',    vol:'active_conn',  label:'主动连接',       color:'#f59e0b'},
+  {key:'rate_tel_conn',  vol:'tel_conn',     label:'电话接通量',     color:'#22d3ee'},
+  {key:'rate_chat_eff',  vol:'chat_eff',     label:'有效微聊对数',   color:'#34d399'},
+  {key:'rate_view_conn', vol:'view_conn',    label:'VR带看接通量',   color:'#a78bfa'},
+  {key:'rate_sub',       vol:'conn_sub',     label:'关注订阅',       color:'#fb923c'},
+  {key:'rate_ai',        vol:'conn_ai',      label:'AI评测',         color:'#60a5fa'},
+  {key:'rate_3d',        vol:'conn_3d',      label:'3D看房',         color:'#f472b6'},
+  {key:'rate_broad',     vol:'conn_broad',   label:'泛连接',         color:'#94a3b8'},
+  {key:'rate_video',     vol:'conn_video',   label:'视频评测',       color:'#ef4444'},
 ];
 
 let rawAJK=[], rawW58=[], rawIdle=[];
@@ -947,20 +947,77 @@ function toggleType(key, color){
 function renderAjkTrend(){
   if(!chartAjkTrend) chartAjkTrend = echarts.init(document.getElementById('ajkTrendChart'));
   const isMonth = ajkCmpMode === 'month';
+  document.getElementById('ajkTrendTitle').textContent =
+    '各类型连接量 & 各连接类型 /vcuv 趋势（' + (isMonth?'月':'周') + '）';
   const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   const visTypes = CONN_TYPES.filter(t=>activeTypes.has(t.key));
-  const opts = {...chartOpts(),
-    tooltip: makeTip(()=>data, visTypes.map(t=>({key:t.key,isRate:true})), (v)=>v.toFixed(3)+'%'),
-    xAxis:xAxis(labels), yAxis:yAxis(v=>v+'%'),
-    series: visTypes.map(t=>({
-      name:t.label, type:'line', smooth:true,
-      data: data.map(d=>d[t.key]!=null?+d[t.key].toFixed(3):null),
-      itemStyle:{color:t.color}, lineStyle:{color:t.color,width:2},
-      symbolSize:4, connectNulls:true,
-    }))
+
+  // tooltip: show both vol and rate for each selected type
+  const tooltip = {
+    trigger:'axis',
+    backgroundColor:'var(--card, #141720)',
+    borderColor:'rgba(255,255,255,0.07)',
+    textStyle:{color:'#e8ecf0',fontSize:12},
+    formatter(params){
+      if(!params.length) return '';
+      let s = `<b>${params[0].axisValue}</b><br>`;
+      // group by type: bar (vol) and line (rate) share the same type label
+      const seen = new Set();
+      params.forEach(p => {
+        const t = CONN_TYPES.find(t=> p.seriesName===t.label+'（量）' || p.seriesName===t.label+'/vcuv');
+        if(!t) return;
+        if(!seen.has(t.label)){
+          seen.add(t.label);
+          const vol = data[params[0].dataIndex]?.[t.vol];
+          const rate = data[params[0].dataIndex]?.[t.key];
+          s += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${t.color};margin-right:4px"></span>`;
+          s += `${t.label}：<b>${vol!=null?(vol>9999?(vol/10000).toFixed(1)+'万':vol.toFixed(0)):'-'}</b>`;
+          s += `　/vcuv: <b>${rate!=null?rate.toFixed(3)+'%':'-'}</b><br>`;
+        }
+      });
+      return s;
+    }
   };
-  chartAjkTrend.setOption(opts, true);
+
+  const volSeries = visTypes.map(t=>({
+    name: t.label+'（量）',
+    type: 'bar',
+    stack: 'vol',
+    data: data.map(d=>d[t.vol]??null),
+    itemStyle:{color:t.color+'99', borderRadius:[2,2,0,0]},
+    barMaxWidth: 32,
+    yAxisIndex: 0,
+  }));
+  const rateSeries = visTypes.map(t=>({
+    name: t.label+'/vcuv',
+    type: 'line',
+    smooth: true,
+    data: data.map(d=>d[t.key]!=null?+d[t.key].toFixed(3):null),
+    itemStyle:{color:t.color},
+    lineStyle:{color:t.color,width:2},
+    symbolSize:4,
+    connectNulls:true,
+    yAxisIndex:1,
+  }));
+
+  chartAjkTrend.setOption({
+    backgroundColor:'transparent',
+    tooltip,
+    legend:{
+      data:[...visTypes.map(t=>t.label+'（量）'), ...visTypes.map(t=>t.label+'/vcuv')],
+      textStyle:{color:'#6b7585'},
+      top:0,
+      type:'scroll',
+    },
+    grid:{left:60,right:55,top:36,bottom:50},
+    xAxis: xAxis(labels),
+    yAxis:[
+      {axisLabel:{color:'#6b7585',fontSize:11,formatter:v=>v>9999?(v/10000).toFixed(0)+'万':v},splitLine:{lineStyle:{color:'rgba(255,255,255,0.07)'}}},
+      {axisLabel:{color:'#6b7585',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
+    ],
+    series:[...volSeries,...rateSeries],
+  }, true);
 }
 
 function renderAjkConnVol(){
