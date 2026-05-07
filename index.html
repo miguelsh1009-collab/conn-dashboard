@@ -245,7 +245,7 @@ function checkPw(){
       <div class="chart-area" id="ajkUvChart"></div>
     </div>
     <div class="section">
-      <div class="section-hd"><span class="section-title" id="ajkConnVolTitle">有效连接数-新 & 有效连接数-新/vcuv 趋势（周）</span></div>
+      <div class="section-hd"><span class="section-title" id="ajkConnVolTitle">VCUV & VCPV/VCUV 趋势（周）</span></div>
       <div class="chart-area" id="ajkConnVolChart"></div>
     </div>
   </div>
@@ -1023,22 +1023,22 @@ function renderAjkTrend(){
 function renderAjkConnVol(){
   if(!chartAjkConn) chartAjkConn = echarts.init(document.getElementById('ajkConnVolChart'));
   const isMonth = ajkCmpMode === 'month';
-  document.getElementById('ajkConnVolTitle').textContent = '有效连接数-新 & 有效连接数-新/vcuv 趋势（' + (isMonth?'月':'周') + '）';
+  document.getElementById('ajkConnVolTitle').textContent = 'VCUV & VCPV/VCUV 趋势（' + (isMonth?'月':'周') + '）';
   const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkConn.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>data, [{key:'conn_total',isRate:false},{key:'rate_total',isRate:true}], (v,pi)=>pi===0?(v>9999?(v/10000).toFixed(1)+'万':v.toFixed(0)):v.toFixed(3)+'%'),
-    legend:{data:['有效连接数-新（日均）','有效连接数-新/vcuv(%)'],textStyle:{color:'#94a3b8'},top:0},
+    tooltip: makeTip(()=>data, [{key:'vcuv',isRate:false},{key:'vcpv_vcuv',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)),
+    legend:{data:['VCUV（万）','VCPV/VCUV'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:60,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
     yAxis:[
-      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v>9999?(v/10000).toFixed(1)+'万':v},splitLine:{lineStyle:{color:'#2a2d3e'}}},
-      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v+'%'},splitLine:{show:false}},
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>(v/10000).toFixed(0)+'万'},splitLine:{lineStyle:{color:'#2a2d3e'}}},
+      {axisLabel:{color:'#94a3b8',fontSize:11,formatter:v=>v.toFixed(1)},splitLine:{show:false}},
     ],
     series:[
-      {name:'有效连接数-新（日均）',type:'bar',data:data.map(d=>d.conn_total),itemStyle:{color:'#6366f155',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
-      {name:'有效连接数-新/vcuv(%)',type:'line',smooth:true,data:data.map(d=>d.rate_total!=null?+d.rate_total.toFixed(3):null),itemStyle:{color:'#f59e0b'},lineStyle:{color:'#f59e0b',width:2},symbolSize:5,yAxisIndex:1},
+      {name:'VCUV（万）',type:'bar',data:data.map(d=>d.vcuv??null),itemStyle:{color:'#22d3ee55',borderRadius:[3,3,0,0]},barMaxWidth:24,yAxisIndex:0},
+      {name:'VCPV/VCUV',type:'line',smooth:true,data:data.map(d=>d.vcpv_vcuv!=null?+d.vcpv_vcuv.toFixed(2):null),itemStyle:{color:'#a78bfa'},lineStyle:{color:'#a78bfa',width:2},symbolSize:5,yAxisIndex:1},
     ]
   },true);
 }
