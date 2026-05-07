@@ -13,6 +13,7 @@
   --bg:#0d0f14; --card:#141720; --bg3:#1c2030;
   --border:rgba(255,255,255,0.07); --text:#e8ecf0; --muted:#6b7585;
   --accent:#4f8ef7; --primary:#4f8ef7;
+  --chart-hover:#f59e0b; --chart-hover-fill:rgba(245,158,11,0.12);
   --danger:#f87171; --success:#34d399; --warn:#fbbf24;
   --font:'Noto Sans SC',sans-serif;
   color-scheme: light dark;
@@ -22,6 +23,7 @@
     --bg:#f5f7fa; --card:#ffffff; --bg3:#edf0f5;
     --border:rgba(0,0,0,0.08); --text:#1a1d23; --muted:#8b95a3;
     --accent:#2563eb; --primary:#2563eb;
+    --chart-hover:#ea580c; --chart-hover-fill:rgba(234,88,12,0.12);
     --danger:#dc2626; --success:#059669; --warn:#d97706;
   }
   .cmp-table tr:hover td{background:rgba(0,0,0,0.025)!important}
@@ -401,9 +403,68 @@ function checkPw(){
 // ── tooltip with 环比 ──
 // seriesCfg: [{key, isRate}] — isRate=true → show pp diff; false → show % relative change
 function makeTip(weeksRef, seriesCfg, fmtFn) {
+  const cardBg = colorVar('--card', '#141720');
+  const hoverColor = colorVar('--chart-hover', '#f59e0b');
   return {
-    trigger:'axis', backgroundColor:'#1a1d2e', borderColor:'#2a2d3e',
+    trigger:'axis',
+    backgroundColor:cardBg,
+    borderColor:'rgba(255,255,255,0.08)',
+    borderWidth:1,
+    padding:[10,12],
     textStyle:{color:'#e2e8f0',fontSize:12},
+    extraCssText:'border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.35);',
+    axisPointer:{
+      type:'line',
+      snap:true,
+      lineStyle:{color:hoverColor,width:1.5,type:'dashed'},
+      label:{show:false}
+    },
+    formatter: params => {
+      const i = params[0].dataIndex;
+      const weeks = weeksRef();
+      let html = `<div style="font-weight:700;color:#f8fafc;margin-bottom:8px">${params[0].axisValue}</div>`;
+      params.forEach((p, pi) => {
+        const cur = p.value;
+        const cfg = seriesCfg[pi] || {};
+        const key = cfg.key;
+        const isRate = cfg.isRate || false;
+        const prev = (i > 0 && key && weeks[i-1]) ? weeks[i-1][key] : null;
+        let chgTxt = '';
+        if (cur != null && prev != null) {
+          if (isRate) {
+            const diff = cur - prev;
+            const sign = diff >= 0 ? '+' : '';
+            const col = diff >= 0 ? '#ef4444' : '#22c55e';
+            chgTxt = ` <span style="color:${col}">${sign}${diff.toFixed(2)}pp</span>`;
+          } else if (prev !== 0) {
+            const pct = (cur - prev) / Math.abs(prev) * 100;
+            const sign = pct >= 0 ? '+' : '';
+            const col = pct >= 0 ? '#ef4444' : '#22c55e';
+            chgTxt = ` <span style="color:${col}">${sign}${pct.toFixed(1)}%</span>`;
+          }
+        }
+        html += `<div style="display:flex;align-items:center;gap:6px;line-height:1.7">`;
+        html += `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color}"></span>`;
+        html += `<span style="color:#cbd5e1">${p.seriesName}:</span>`;
+        html += `<span style="color:#f8fafc;font-weight:600">${cur != null ? fmtFn(cur, pi) : '--'}</span>${chgTxt}</div>`;
+      });
+      return html;
+    }
+  };
+}
+
+function makePlainTip(weeksRef, seriesCfg, fmtFn) {
+  return {
+    trigger:'axis',
+    backgroundColor:'#1a1d2e',
+    borderColor:'#2a2d3e',
+    textStyle:{color:'#e2e8f0',fontSize:12},
+    axisPointer:{
+      type:'line',
+      snap:true,
+      lineStyle:{color:'rgba(255,255,255,0.18)',width:1},
+      label:{show:false}
+    },
     formatter: params => {
       const i = params[0].dataIndex;
       const weeks = weeksRef();
@@ -463,9 +524,34 @@ let chartW58Uv=null, chartW58VcuvUv=null, chartW58ConnRate=null, chartW58Dev=nul
 let chartIdleCnt=null, chartIdleVcuv=null, chartIdleLead=null;
 
 // ── helpers ──
-function chartOpts(){ return { backgroundColor:'transparent', tooltip:{trigger:'axis',backgroundColor:'var(--card, #141720)',borderColor:'rgba(255,255,255,0.07)',textStyle:{color:'#e8ecf0',fontSize:12}}, legend:{textStyle:{color:'#6b7585'},top:0,type:'scroll'}, grid:{left:55,right:20,top:36,bottom:50} }; }
+function chartOpts(){
+  return {
+    backgroundColor:'transparent',
+    tooltip:{
+      trigger:'axis',
+      backgroundColor:colorVar('--card', '#141720'),
+      borderColor:'rgba(255,255,255,0.07)',
+      borderWidth:1,
+      padding:[10,12],
+      textStyle:{color:'#e8ecf0',fontSize:12},
+      extraCssText:'border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.35);',
+      axisPointer:{
+        type:'line',
+        snap:true,
+        lineStyle:{color:colorVar('--chart-hover', '#f59e0b'),width:1.5,type:'dashed'},
+        label:{show:false}
+      }
+    },
+    legend:{textStyle:{color:'#6b7585'},top:0,type:'scroll'},
+    grid:{left:55,right:20,top:36,bottom:50}
+  };
+}
 function xAxis(data){ return {data, axisLabel:{color:'#6b7585',fontSize:11,rotate:30}, axisLine:{lineStyle:{color:'rgba(255,255,255,0.07)'}}}; }
 function yAxis(fmt){ return {axisLabel:{color:'#6b7585',fontSize:11,formatter:fmt||null}, splitLine:{lineStyle:{color:'rgba(255,255,255,0.07)'}}}; }
+function colorVar(name, fallback){
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 function fmt(v,d=2){ return v==null?'--':Number(v).toLocaleString('zh-CN',{minimumFractionDigits:0,maximumFractionDigits:d}); }
 function fmtW(v){ return v==null?'--':(v/10000).toFixed(2)+'万'; }
 function fmtPct(v){ return v==null?'--':v.toFixed(2)+'%'; }
@@ -947,38 +1033,23 @@ function toggleType(key, color){
 function renderAjkTrend(){
   if(!chartAjkTrend) chartAjkTrend = echarts.init(document.getElementById('ajkTrendChart'));
   const isMonth = ajkCmpMode === 'month';
+  const cardColor = colorVar('--card', '#141720');
   document.getElementById('ajkTrendTitle').textContent =
     '各类型连接量 & 各连接类型 /vcuv 趋势（' + (isMonth?'月':'周') + '）';
   const data = isMonth ? ajkMonths : ajkWeeks.slice(-26);
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   const visTypes = CONN_TYPES.filter(t=>activeTypes.has(t.key));
 
-  // tooltip: show both vol and rate for each selected type
-  const tooltip = {
-    trigger:'axis',
-    backgroundColor:'var(--card, #141720)',
-    borderColor:'rgba(255,255,255,0.07)',
-    textStyle:{color:'#e8ecf0',fontSize:12},
-    formatter(params){
-      if(!params.length) return '';
-      let s = `<b>${params[0].axisValue}</b><br>`;
-      // group by type: bar (vol) and line (rate) share the same type label
-      const seen = new Set();
-      params.forEach(p => {
-        const t = CONN_TYPES.find(t=> p.seriesName===t.label+'（量）' || p.seriesName===t.label+'/vcuv');
-        if(!t) return;
-        if(!seen.has(t.label)){
-          seen.add(t.label);
-          const vol = data[params[0].dataIndex]?.[t.vol];
-          const rate = data[params[0].dataIndex]?.[t.key];
-          s += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${t.color};margin-right:4px"></span>`;
-          s += `${t.label}：<b>${vol!=null?(vol>9999?(vol/10000).toFixed(1)+'万':vol.toFixed(0)):'-'}</b>`;
-          s += `　/vcuv: <b>${rate!=null?rate.toFixed(3)+'%':'-'}</b><br>`;
-        }
-      });
-      return s;
-    }
-  };
+  const tooltip = makePlainTip(
+    () => data,
+    [
+      ...visTypes.map(t => ({key:t.vol,isRate:false})),
+      ...visTypes.map(t => ({key:t.key,isRate:true})),
+    ],
+    (v, pi) => pi < visTypes.length
+      ? (v > 9999 ? (v/10000).toFixed(2)+'万' : v.toFixed(0))
+      : v.toFixed(2)+'%'
+  );
 
   const volSeries = visTypes.map(t=>({
     name: t.label+'（量）',
@@ -986,6 +1057,15 @@ function renderAjkTrend(){
     stack: 'vol',
     data: data.map(d=>d[t.vol]??null),
     itemStyle:{color:t.color+'99', borderRadius:[2,2,0,0]},
+    emphasis:{
+      itemStyle:{
+        color:t.color,
+        borderColor:'rgba(255,255,255,0.22)',
+        borderWidth:1,
+        shadowBlur:14,
+        shadowColor:t.color
+      }
+    },
     barMaxWidth: 32,
     yAxisIndex: 0,
   }));
@@ -996,8 +1076,19 @@ function renderAjkTrend(){
     data: data.map(d=>d[t.key]!=null?+d[t.key].toFixed(3):null),
     itemStyle:{color:t.color},
     lineStyle:{color:t.color,width:2},
-    symbolSize:4,
+    symbolSize:6,
     connectNulls:true,
+    emphasis:{
+      focus:'series',
+      itemStyle:{
+        color:t.color,
+        borderColor:cardColor,
+        borderWidth:2,
+        shadowBlur:12,
+        shadowColor:t.color
+      },
+      lineStyle:{color:t.color,width:3}
+    },
     yAxisIndex:1,
   }));
 
@@ -1028,7 +1119,7 @@ function renderAjkConnVol(){
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkConn.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>data, [{key:'vcuv',isRate:false},{key:'vcpv_vcuv',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)),
+    tooltip: makePlainTip(()=>data, [{key:'vcuv',isRate:false},{key:'vcpv_vcuv',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)),
     legend:{data:['VCUV（万）','VCPV/VCUV'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:60,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1051,7 +1142,7 @@ function renderAjkUv(){
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkUv.setOption({
     ...chartOpts(),
-    tooltip: makeTip(()=>data, [{key:'uv',isRate:false},{key:'vcuv_rate',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)+'%'),
+    tooltip: makePlainTip(()=>data, [{key:'uv',isRate:false},{key:'vcuv_rate',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)+'%'),
     legend:{data:['UV（万）','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
