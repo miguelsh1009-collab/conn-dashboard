@@ -1447,7 +1447,7 @@ function renderW58Charts(){
 
   // 次日返回率
   const f = s => { const d=new Date(s+'T00:00:00'); return `${d.getMonth()+1}.${d.getDate()}`; };
-  const retainLabels = weeks.map(w => {
+  const retainLabels = isMonth ? weeks.map(m=>mLabelFull(m.mo,m.days)) : weeks.map(w => {
     const base = wLabel(w.week, w.days);
     if(!w.retainExcluded || !w.retainExcluded.length) return base;
     return base + '\n(不含' + w.retainExcluded.map(f).join(',') + ')';
