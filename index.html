@@ -418,9 +418,53 @@ function checkPw(){
 </div><!-- /container -->
 
 <script>
-// ── tooltip with 环比 ──
+// ── tooltip compare helpers ──
 // seriesCfg: [{key, isRate}] — isRate=true → show pp diff; false → show % relative change
-function makeTip(weeksRef, seriesCfg, fmtFn, compareLabel='环比') {
+function tipCompareText(label, cur, base, isRate=false){
+  if(cur==null||base==null) return '';
+  if(isRate){
+    const diff = cur - base;
+    const sign = diff >= 0 ? '+' : '';
+    const col = diff >= 0 ? '#ef4444' : '#22c55e';
+    return `<span style="color:#94a3b8">${label}</span> <span style="color:${col}">${sign}${diff.toFixed(2)}pp</span>`;
+  }
+  if(base===0) return '';
+  const pct = (cur - base) / Math.abs(base) * 100;
+  const sign = pct >= 0 ? '+' : '';
+  const col = pct >= 0 ? '#ef4444' : '#22c55e';
+  return `<span style="color:#94a3b8">${label}</span> <span style="color:${col}">${sign}${pct.toFixed(1)}%</span>`;
+}
+
+function findWeekLastYearStrict(weeks, cur){
+  if(!cur?.week) return null;
+  const target = new Date(cur.week+'T00:00:00').getTime() - 364*86400000;
+  let best=null, bestDiff=Infinity;
+  (weeks||[]).forEach(w=>{
+    if(!w?.week) return;
+    const diff=Math.abs(new Date(w.week+'T00:00:00').getTime()-target);
+    if(diff<bestDiff){best=w;bestDiff=diff;}
+  });
+  return bestDiff <= 14*86400000 ? best : null;
+}
+
+function findTipYoyPeriod(periods, cur){
+  if(!cur) return null;
+  if(cur.mo) return findMonthLastYear(periods||[], cur);
+  if(cur.week) return findWeekLastYearStrict(periods||[], cur);
+  return null;
+}
+
+function buildTipCompare(cur, key, isRate, periods, allPeriods, idx, compareLabel){
+  if(cur==null||!key) return '';
+  const yoy = findTipYoyPeriod(allPeriods, periods[idx]);
+  const parts = [
+    tipCompareText('同比', cur, yoy?.[key], isRate),
+    tipCompareText(compareLabel, cur, idx>0 ? periods[idx-1]?.[key] : null, isRate),
+  ].filter(Boolean);
+  return parts.length ? ` <span style="font-size:11px">${parts.join(' <span style="color:#64748b">·</span> ')}</span>` : '';
+}
+
+function makeTip(weeksRef, seriesCfg, fmtFn, compareLabel='环比', allPeriodsRef=null) {
   const cardBg = colorVar('--card', '#141720');
   const hoverColor = colorVar('--chart-hover', '#f59e0b');
   return {
@@ -440,27 +484,14 @@ function makeTip(weeksRef, seriesCfg, fmtFn, compareLabel='环比') {
     formatter: params => {
       const i = params[0].dataIndex;
       const weeks = weeksRef();
+      const allPeriods = allPeriodsRef ? allPeriodsRef() : weeks;
       let html = `<div style="font-weight:700;color:#f8fafc;margin-bottom:8px">${params[0].axisValue}</div>`;
       params.forEach((p, pi) => {
         const cur = p.value;
         const cfg = seriesCfg[pi] || {};
         const key = cfg.key;
         const isRate = cfg.isRate || false;
-        const prev = (i > 0 && key && weeks[i-1]) ? weeks[i-1][key] : null;
-        let chgTxt = '';
-        if (cur != null && prev != null) {
-          if (isRate) {
-            const diff = cur - prev;
-            const sign = diff >= 0 ? '+' : '';
-            const col = diff >= 0 ? '#ef4444' : '#22c55e';
-            chgTxt = ` <span style="color:#94a3b8">${compareLabel}</span> <span style="color:${col}">${sign}${diff.toFixed(2)}pp</span>`;
-          } else if (prev !== 0) {
-            const pct = (cur - prev) / Math.abs(prev) * 100;
-            const sign = pct >= 0 ? '+' : '';
-            const col = pct >= 0 ? '#ef4444' : '#22c55e';
-            chgTxt = ` <span style="color:#94a3b8">${compareLabel}</span> <span style="color:${col}">${sign}${pct.toFixed(1)}%</span>`;
-          }
-        }
+        const chgTxt = buildTipCompare(cur, key, isRate, weeks, allPeriods, i, compareLabel);
         html += `<div style="display:flex;align-items:center;gap:6px;line-height:1.7">`;
         html += `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color}"></span>`;
         html += `<span style="color:#cbd5e1">${p.seriesName}:</span>`;
@@ -471,7 +502,7 @@ function makeTip(weeksRef, seriesCfg, fmtFn, compareLabel='环比') {
   };
 }
 
-function makePlainTip(weeksRef, seriesCfg, fmtFn, compareLabel='环比') {
+function makePlainTip(weeksRef, seriesCfg, fmtFn, compareLabel='环比', allPeriodsRef=null) {
   return {
     trigger:'axis',
     backgroundColor:'#1a1d2e',
@@ -486,27 +517,14 @@ function makePlainTip(weeksRef, seriesCfg, fmtFn, compareLabel='环比') {
     formatter: params => {
       const i = params[0].dataIndex;
       const weeks = weeksRef();
+      const allPeriods = allPeriodsRef ? allPeriodsRef() : weeks;
       let html = `<b>${params[0].axisValue}</b><br>`;
       params.forEach((p, pi) => {
         const cur = p.value;
         const cfg = seriesCfg[pi] || {};
         const key = cfg.key;
         const isRate = cfg.isRate || false;
-        const prev = (i > 0 && key && weeks[i-1]) ? weeks[i-1][key] : null;
-        let chgTxt = '';
-        if (cur != null && prev != null) {
-          if (isRate) {
-            const diff = cur - prev;
-            const sign = diff >= 0 ? '+' : '';
-            const col = diff >= 0 ? '#ef4444' : '#22c55e';
-            chgTxt = ` <span style="color:#94a3b8">${compareLabel}</span> <span style="color:${col}">${sign}${diff.toFixed(2)}pp</span>`;
-          } else if (prev !== 0) {
-            const pct = (cur - prev) / Math.abs(prev) * 100;
-            const sign = pct >= 0 ? '+' : '';
-            const col = pct >= 0 ? '#ef4444' : '#22c55e';
-            chgTxt = ` <span style="color:#94a3b8">${compareLabel}</span> <span style="color:${col}">${sign}${pct.toFixed(1)}%</span>`;
-          }
-        }
+        const chgTxt = buildTipCompare(cur, key, isRate, weeks, allPeriods, i, compareLabel);
         html += `${p.marker}${p.seriesName}：${cur != null ? fmtFn(cur, pi) : '--'}${chgTxt}<br>`;
       });
       return html;
@@ -1129,7 +1147,8 @@ function renderAjkTrend(){
     (v, pi) => pi < visTypes.length
       ? (v > 9999 ? (v/10000).toFixed(2)+'万' : v.toFixed(0))
       : v.toFixed(2)+'%',
-    isMonth ? '月环比' : '周环比'
+    isMonth ? '月环比' : '周环比',
+    () => isMonth ? ajkMonths : ajkWeeks
   );
 
   const volSeries = visTypes.map(t=>({
@@ -1200,7 +1219,7 @@ function renderAjkConnVol(){
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkConn.setOption({
     ...chartOpts(),
-    tooltip: makePlainTip(()=>data, [{key:'vcuv',isRate:false},{key:'vcpv_vcuv',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2), isMonth ? '月环比' : '周环比'),
+    tooltip: makePlainTip(()=>data, [{key:'vcuv',isRate:false},{key:'vcpv_vcuv',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2), isMonth ? '月环比' : '周环比', () => isMonth ? ajkMonths : ajkWeeks),
     legend:{data:['VCUV（万）','VCPV/VCUV'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:60,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1223,7 +1242,7 @@ function renderAjkUv(){
   const labels = isMonth ? data.map(m=>mLabelFull(m.mo,m.days)) : data.map(w=>wLabel(w.week,w.days));
   chartAjkUv.setOption({
     ...chartOpts(),
-    tooltip: makePlainTip(()=>data, [{key:'uv',isRate:false},{key:'vcuv_rate',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)+'%', isMonth ? '月环比' : '周环比'),
+    tooltip: makePlainTip(()=>data, [{key:'uv',isRate:false},{key:'vcuv_rate',isRate:true}], (v,pi)=>pi===0?(v/10000).toFixed(2)+'万':v.toFixed(2)+'%', isMonth ? '月环比' : '周环比', () => isMonth ? ajkMonths : ajkWeeks),
     legend:{data:['UV（万）','VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1371,7 +1390,7 @@ function renderW58Charts(){
   if(!chartW58Uv) chartW58Uv = echarts.init(document.getElementById('w58UvChart'));
   chartW58Uv.setOption({
     ...chartOpts(),
-    tooltip: makePlainTip(()=>weeks, [{key:'uv',isRate:false},{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万', isMonth ? '月环比' : '周环比'),
+    tooltip: makePlainTip(()=>weeks, [{key:'uv',isRate:false},{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万', isMonth ? '月环比' : '周环比', () => isMonth ? w58Months : w58Weeks),
     legend:{data:['UV合计','APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1387,7 +1406,7 @@ function renderW58Charts(){
   if(!chartW58VcuvUv) chartW58VcuvUv = echarts.init(document.getElementById('w58VcuvUvChart'));
   chartW58VcuvUv.setOption({
     ...chartOpts(),
-    tooltip: makePlainTip(()=>weeks, [{key:'vcuv_rate',isRate:true}], v=>v.toFixed(2)+'%', isMonth ? '月环比' : '周环比'),
+    tooltip: makePlainTip(()=>weeks, [{key:'vcuv_rate',isRate:true}], v=>v.toFixed(2)+'%', isMonth ? '月环比' : '周环比', () => isMonth ? w58Months : w58Weeks),
     legend:{data:['VCUV/UV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1401,7 +1420,7 @@ function renderW58Charts(){
   if(!chartW58ConnRate) chartW58ConnRate = echarts.init(document.getElementById('w58ConnRateChart'));
   chartW58ConnRate.setOption({
     ...chartOpts(),
-    tooltip: makePlainTip(()=>weeks, [{key:'conn_rate',isRate:true}], v=>v.toFixed(2)+'%', isMonth ? '月环比' : '周环比'),
+    tooltip: makePlainTip(()=>weeks, [{key:'conn_rate',isRate:true}], v=>v.toFixed(2)+'%', isMonth ? '月环比' : '周环比', () => isMonth ? w58Months : w58Weeks),
     legend:{data:['有效连接/VCUV(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1415,7 +1434,7 @@ function renderW58Charts(){
   if(!chartW58Dev) chartW58Dev = echarts.init(document.getElementById('w58DevChart'));
   chartW58Dev.setOption({
     ...chartOpts(),
-    tooltip: makePlainTip(()=>weeks, [{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万', isMonth ? '月环比' : '周环比'),
+    tooltip: makePlainTip(()=>weeks, [{key:'uv_app',isRate:false},{key:'uv_mini',isRate:false}], v=>(v/10000).toFixed(2)+'万', isMonth ? '月环比' : '周环比', () => isMonth ? w58Months : w58Weeks),
     legend:{data:['APP','小程序'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1436,7 +1455,7 @@ function renderW58Charts(){
   if(!chartW58Retain) chartW58Retain = echarts.init(document.getElementById('w58RetainChart'));
   chartW58Retain.setOption({
     ...chartOpts(),
-    tooltip: makePlainTip(()=>weeks, [{key:'retain_1d',isRate:true}], v=>v.toFixed(2)+'%', isMonth ? '月环比' : '周环比'),
+    tooltip: makePlainTip(()=>weeks, [{key:'retain_1d',isRate:true}], v=>v.toFixed(2)+'%', isMonth ? '月环比' : '周环比', () => isMonth ? w58Months : w58Weeks),
     legend:{data:['次日返回率(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:20,top:36,bottom:65},
     xAxis:{...xAxis(retainLabels), axisLabel:{color:'#6b7585',fontSize:10,rotate:30,interval:0}},
@@ -1789,7 +1808,8 @@ function renderIdleCharts(){
     tooltip: makePlainTip(ptsRef,
       [{key:'online_cnt',isRate:false},{key:'placed_cnt',isRate:false},{key:'placed_rate2',isRate:true}],
       (v,pi)=>pi<2?fmt(v,0):v.toFixed(2)+'%',
-      isMonth ? '月环比' : '周环比'),
+      isMonth ? '月环比' : '周环比',
+      () => isMonth ? idleMonths : idleWeeks),
     legend:{data:['在线楼盘数','投放成功盘数','投放成功盘/在线楼盘(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:65,right:60,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1812,7 +1832,8 @@ function renderIdleCharts(){
     tooltip: makePlainTip(ptsRef,
       [{key:'online_vcuv',isRate:false},{key:'placed_vcuv',isRate:false},{key:'placed_vcuv_rate',isRate:true}],
       (v,pi)=>pi<2?(v/10000).toFixed(1)+'万':v.toFixed(2)+'%',
-      isMonth ? '月环比' : '周环比'),
+      isMonth ? '月环比' : '周环比',
+      () => isMonth ? idleMonths : idleWeeks),
     legend:{data:['在线盘总VCUV','投放盘VCUV','投放VCUV占比(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:60,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
@@ -1835,7 +1856,8 @@ function renderIdleCharts(){
     tooltip: makePlainTip(ptsRef,
       [{key:'lead_total',isRate:false},{key:'lead_adv',isRate:false},{key:'lead_brk',isRate:false},{key:'lead_brk_rate',isRate:true}],
       (v,pi)=>pi<3?fmt(v,0):v.toFixed(2)+'%',
-      isMonth ? '月环比' : '周环比'),
+      isMonth ? '月环比' : '周环比',
+      () => isMonth ? idleMonths : idleWeeks),
     legend:{data:['总线索','顾问线索','经纪人线索','经纪人线索/总线索(%)'],textStyle:{color:'#94a3b8'},top:0},
     grid:{left:55,right:55,top:36,bottom:50},
     xAxis:xAxis(labels),
