@@ -4,10 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>数据看板</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg:#0d0f14; --card:#141720; --bg3:#1c2030;
@@ -15,7 +11,7 @@
   --accent:#4f8ef7; --primary:#4f8ef7;
   --chart-hover:#f59e0b; --chart-hover-fill:rgba(245,158,11,0.12);
   --danger:#f87171; --success:#34d399; --warn:#fbbf24;
-  --font:'Noto Sans SC',sans-serif;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
   color-scheme: light dark;
 }
 @media(prefers-color-scheme:light){
@@ -70,8 +66,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .metric-sub{font-size:11px;color:var(--muted)}
 
 /* Chart */
-.chart-area{height:320px}
-.chart-area-lg{height:400px}
+.chart-area{height:320px;min-height:320px;contain:layout paint}
+.chart-area-lg{height:400px;min-height:400px;contain:layout paint}
 
 /* Type toggles */
 .type-pills{display:flex;gap:6px;flex-wrap:wrap}
@@ -149,7 +145,6 @@ function checkPw(){
     <button class="tab" onclick="switchTab('idle')">闲置投放</button>
   </div>
   <span class="updated" id="updatedText">加载中…</span>
-  <a href="https://miguelsh1009-collab.github.io/anjuke-data-dashboard/" target="_blank" style="padding:6px 14px;border-radius:6px;background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap">城市数据看板 ↗</a>
   <button class="upload-btn" onclick="toggleSettings()" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);color:var(--muted)">⚙ 配置</button>
   <span id="pushStatus" style="font-size:11px;color:var(--muted);display:none"></span>
 </div>
@@ -564,6 +559,30 @@ let activeTypes = new Set(['rate_total','rate_active']);
 let chartAjkTrend=null, chartAjkUv=null, chartAjkConn=null;
 let chartW58Uv=null, chartW58VcuvUv=null, chartW58ConnRate=null, chartW58Dev=null, chartW58Retain=null;
 let chartIdleCnt=null, chartIdleVcuv=null, chartIdleLead=null;
+let ajkCache=null;
+let ajkChartTimer=null;
+const CDN = {
+  echarts: 'https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js',
+  xlsx: 'https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+};
+const scriptPromises = {};
+
+function loadScriptOnce(key, src){
+  if(window[key]) return Promise.resolve(window[key]);
+  if(scriptPromises[key]) return scriptPromises[key];
+  scriptPromises[key] = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve(window[key]);
+    s.onerror = () => reject(new Error('加载失败：'+src));
+    document.head.appendChild(s);
+  });
+  return scriptPromises[key];
+}
+
+function ensureEcharts(){ return loadScriptOnce('echarts', CDN.echarts); }
+function ensureXlsx(){ return loadScriptOnce('XLSX', CDN.xlsx); }
 
 // ── helpers ──
 function chartOpts(){
@@ -857,21 +876,42 @@ function aggregateAjkRowsByDate(rows, cityLabel){
   return Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
 }
 
+function getAjkCache(){
+  if(ajkCache) return ajkCache;
+  const byCity = new Map();
+  const citySet = new Set();
+  const authSet = new Set(GLOBAL_AUTH_CITIES);
+  const authRows = [];
+  let nationalRows = [];
+  rawAJK.forEach(d=>{
+    const city = d.city || '全国';
+    citySet.add(city);
+    if(!byCity.has(city)) byCity.set(city, []);
+    byCity.get(city).push(d);
+    if(city === '全国') nationalRows.push(d);
+    if(authSet.has(city)) authRows.push(d);
+  });
+  const cities = [...citySet];
+  const ordered = cities.filter(c => c !== '全国' && c !== GLOBAL_AUTH_CITY_LABEL).sort((a,b)=>a.localeCompare(b,'zh-CN'));
+  const available = [];
+  if(cities.includes('全国')) available.push('全国');
+  if(authRows.length) available.push(GLOBAL_AUTH_CITY_LABEL);
+  available.push(...ordered);
+  ajkCache = {
+    byCity,
+    available,
+    nationalRows: nationalRows.length ? nationalRows : rawAJK,
+    globalAuthRows: authRows.length ? aggregateAjkRowsByDate(authRows, GLOBAL_AUTH_CITY_LABEL) : [],
+  };
+  return ajkCache;
+}
+
 function ajkGlobalAuthRows(){
-  const citySet=new Set(GLOBAL_AUTH_CITIES);
-  return aggregateAjkRowsByDate(
-    rawAJK.filter(d=>citySet.has(d.city)),
-    GLOBAL_AUTH_CITY_LABEL
-  );
+  return getAjkCache().globalAuthRows;
 }
 
 function ajkAvailableCities(){
-  const cities = [...new Set((rawAJK||[]).map(d => d.city || '全国').filter(Boolean))];
-  const ordered = cities.filter(c => c !== '全国' && c !== GLOBAL_AUTH_CITY_LABEL).sort((a,b)=>a.localeCompare(b,'zh-CN'));
-  const hasGlobalAuth = rawAJK.some(d => GLOBAL_AUTH_CITIES.includes(d.city));
-  const head = cities.includes('全国') ? ['全国'] : [];
-  if(hasGlobalAuth) head.push(GLOBAL_AUTH_CITY_LABEL);
-  return [...head, ...ordered];
+  return getAjkCache().available;
 }
 
 function refreshAjkCitySelect(){
@@ -885,14 +925,14 @@ function refreshAjkCitySelect(){
 }
 
 function ajkRowsForSelectedCity(){
+  const cache = getAjkCache();
   if (ajkSelCity === '全国') {
-    const nationalRows = rawAJK.filter(d => (d.city || '全国') === '全国');
-    return nationalRows.length ? nationalRows : rawAJK;
+    return cache.nationalRows;
   }
   if (ajkSelCity === GLOBAL_AUTH_CITY_LABEL) {
-    return ajkGlobalAuthRows();
+    return cache.globalAuthRows;
   }
-  return rawAJK.filter(d => (d.city || '全国') === ajkSelCity);
+  return cache.byCity.get(ajkSelCity) || [];
 }
 
 function selectAjkCity(city){
@@ -903,12 +943,12 @@ function selectAjkCity(city){
 function buildAjkTop5(){
   const row = document.getElementById('ajkTop5Row');
   if (!row) return;
-  const cityRows = rawAJK.filter(d => d.city && d.city !== '全国');
-  const hasCities = [...new Set(cityRows.map(d => d.city))].length > 0;
-  if (!hasCities) { row.style.display = 'none'; return; }
+  const cache = getAjkCache();
+  const cityEntries = [...cache.byCity.entries()].filter(([city]) => city && city !== '全国');
+  if (!cityEntries.length) { row.style.display = 'none'; return; }
 
-  const cityWeeks = [...new Set(cityRows.map(d => d.city))].map(city => {
-    const weeks = groupByWeek(cityRows.filter(d => d.city === city));
+  const cityWeeks = cityEntries.map(([city, rows]) => {
+    const weeks = groupByWeek(rows);
     const latest = weeks[weeks.length - 1];
     if (!latest) return null;
     return {
@@ -929,8 +969,8 @@ function buildAjkTop5(){
   `).join('');
 
   // 取全国最新周的时间范围作为说明
-  const nationalWeeks = groupByWeek(rawAJK.filter(d => d.city === '全国' || !d.city));
-  const latestWeek = nationalWeeks.length ? nationalWeeks[nationalWeeks.length-1] : (cityWeeks[0] ? groupByWeek(cityRows.filter(d=>d.city===cityWeeks[0].city))[0] : null);
+  const nationalWeeks = groupByWeek(cache.nationalRows);
+  const latestWeek = nationalWeeks.length ? nationalWeeks[nationalWeeks.length-1] : null;
   const periodEl = document.getElementById('ajkTop5Period');
   if(periodEl && latestWeek) periodEl.textContent = '数据区间：' + wLabel(latestWeek.week, latestWeek.days);
 
@@ -942,8 +982,9 @@ function buildAjkTop5(){
 
 function renderAjk(){
   refreshAjkCitySelect();
-  ajkWeeks = groupByWeek(ajkRowsForSelectedCity());
-  ajkMonths = groupByMonth(ajkRowsForSelectedCity());
+  const cityRows = ajkRowsForSelectedCity();
+  ajkWeeks = groupByWeek(cityRows);
+  ajkMonths = groupByMonth(cityRows);
   selAjkWeek = ajkWeeks.length-1;
   selAjkMonth = ajkMonths.length-1;
   ajkCmpMode = 'week';
@@ -952,9 +993,31 @@ function renderAjk(){
   renderAjkKpi();
   renderAjkCmp();
   buildAjkTypePills();
-  renderAjkTrend();
-  renderAjkUv();
-  renderAjkConnVol();
+  updateAjkChartTitles();
+  scheduleAjkCharts();
+}
+
+function updateAjkChartTitles(){
+  const isMonth = ajkCmpMode === 'month';
+  document.getElementById('ajkTrendTitle').textContent = '各类型连接量 & 各连接类型 /VCUV 趋势（' + (isMonth?'月':'周') + '）';
+  document.getElementById('ajkConnVolTitle').textContent = 'VCUV & VCPV/VCUV 趋势（' + (isMonth?'月':'周') + '）';
+  document.getElementById('ajkUvTitle').textContent = 'UV & VCUV/UV 趋势（' + (isMonth?'月':'周') + '）';
+}
+
+function scheduleAjkCharts(){
+  clearTimeout(ajkChartTimer);
+  const run = ()=>{
+    ensureEcharts()
+      .then(()=>{
+        renderAjkTrend();
+        renderAjkUv();
+        renderAjkConnVol();
+      })
+      .catch(e=>showToast(e.message, true));
+  };
+  const delayRun = () => { ajkChartTimer = setTimeout(run, 180); };
+  if(document.readyState === 'complete') delayRun();
+  else window.addEventListener('load', delayRun, {once:true});
 }
 
 function buildAjkWeekNav(){
@@ -964,7 +1027,7 @@ function buildAjkWeekNav(){
   nav.innerHTML = ajkWeeks.slice(start).map((w,i)=>{
     const idx = start+i;
     const active = ajkCmpMode==='week' && idx===selAjkWeek;
-    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='week';selAjkWeek=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp();renderAjkTrend();renderAjkUv();renderAjkConnVol()">${wLabel(w.week,w.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='week';selAjkWeek=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp();scheduleAjkCharts()">${wLabel(w.week,w.days)}</button>`;
   }).join('');
 }
 
@@ -975,7 +1038,7 @@ function buildAjkMonthNav(){
   nav.innerHTML = ajkMonths.slice(start).map((m,i)=>{
     const idx = start+i;
     const active = ajkCmpMode==='month' && idx===selAjkMonth;
-    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='month';selAjkMonth=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp();renderAjkTrend();renderAjkUv();renderAjkConnVol()">${mLabelFull(m.mo,m.days)}</button>`;
+    return `<button class="week-btn ${active?'active':''}" onclick="ajkCmpMode='month';selAjkMonth=${idx};buildAjkWeekNav();buildAjkMonthNav();renderAjkCmp();scheduleAjkCharts()">${mLabelFull(m.mo,m.days)}</button>`;
   }).join('');
 }
 
@@ -1129,6 +1192,7 @@ function toggleType(key, color){
 }
 
 function renderAjkTrend(){
+  if(!window.echarts){ ensureEcharts().then(renderAjkTrend); return; }
   if(!chartAjkTrend) chartAjkTrend = echarts.init(document.getElementById('ajkTrendChart'));
   const isMonth = ajkCmpMode === 'month';
   const cardColor = colorVar('--card', '#141720');
@@ -1212,6 +1276,7 @@ function renderAjkTrend(){
 }
 
 function renderAjkConnVol(){
+  if(!window.echarts){ ensureEcharts().then(renderAjkConnVol); return; }
   if(!chartAjkConn) chartAjkConn = echarts.init(document.getElementById('ajkConnVolChart'));
   const isMonth = ajkCmpMode === 'month';
   document.getElementById('ajkConnVolTitle').textContent = 'VCUV & VCPV/VCUV 趋势（' + (isMonth?'月':'周') + '）';
@@ -1235,6 +1300,7 @@ function renderAjkConnVol(){
 }
 
 function renderAjkUv(){
+  if(!window.echarts){ ensureEcharts().then(renderAjkUv); return; }
   if(!chartAjkUv) chartAjkUv = echarts.init(document.getElementById('ajkUvChart'));
   const isMonth = ajkCmpMode === 'month';
   document.getElementById('ajkUvTitle').textContent = 'UV & VCUV/UV 趋势（' + (isMonth?'月':'周') + '）';
@@ -1382,6 +1448,7 @@ function renderW58Cmp(){
 }
 
 function renderW58Charts(){
+  if(!window.echarts){ ensureEcharts().then(renderW58Charts); return; }
   const isMonth = w58CmpMode === 'month';
   const weeks = isMonth ? w58Months : w58Weeks.slice(-26);
   const labels = isMonth ? weeks.map(m=>mLabelFull(m.mo,m.days)) : weeks.map(w=>wLabel(w.week,w.days));
@@ -1794,6 +1861,7 @@ function renderIdle(){
 }
 
 function renderIdleCharts(){
+  if(!window.echarts){ ensureEcharts().then(renderIdleCharts); return; }
   const isMonth=idleCmpMode==='month';
   const pts=isMonth?idleMonths:idleWeeks.slice(-26);
   const labels=isMonth?pts.map(m=>mLabel(m.mo)):pts.map(w=>wLabel(w.week,w.days));
@@ -1956,6 +2024,7 @@ async function handleUpload(event) {
   if (!file) return;
   showToast('正在解析…', false);
   try {
+    await ensureXlsx();
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, {type:'array'}); // raw serial numbers for dates — timezone-safe
 
@@ -1965,6 +2034,7 @@ async function handleUpload(event) {
     const saveData={ajk:ajkData, w58:rawW58, idle:rawIdle};
     try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，已清除旧缓存',e); localStorage.removeItem('conn_data'); }
     rawAJK = ajkData;
+    ajkCache = null;
     const lastDate = ajkData[ajkData.length-1]?.date || '--';
     document.getElementById('updatedText').textContent = '数据至：'+lastDate;
 
@@ -2098,6 +2168,7 @@ async function handleAjkUpload(event) {
     const saveData = {ajk:ajkData, w58:rawW58, idle:rawIdle};
     try { localStorage.setItem('conn_data', JSON.stringify(saveData)); } catch(e) { console.warn('localStorage 空间不足，已清除旧缓存',e); localStorage.removeItem('conn_data'); }
     rawAJK = ajkData;
+    ajkCache = null;
     updateDateLabel('ajk');
 
     [chartAjkTrend,chartAjkUv,chartAjkConn,chartW58Uv,chartW58VcuvUv,chartW58ConnRate,chartW58Dev,chartW58Retain,
@@ -2207,6 +2278,7 @@ async function handleW58Upload(event) {
   if (!file) return;
   showToast('正在解析58数据…', false);
   try {
+    await ensureXlsx();
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, {type:'array'});
     const w58Data = parseW58Sheet(wb);
@@ -2239,7 +2311,8 @@ async function fetchJson(url){
 }
 
 function loadLocalDataScript(name, globalName){
-  if(location.protocol !== 'file:') return Promise.resolve(null);
+  const isLocalHost = ['localhost','127.0.0.1','0.0.0.0'].includes(location.hostname);
+  if(location.protocol !== 'file:' && !isLocalHost) return Promise.resolve(null);
   if(Array.isArray(window[globalName]) && window[globalName].length){
     return Promise.resolve(window[globalName]);
   }
@@ -2257,11 +2330,14 @@ async function loadIdleData(){
   const localIdle = await loadLocalDataScript('idle', '__LOCAL_IDLE_DATA__');
   if(localIdle && localIdle.length){ rawIdle = localIdle; idleLoaded = true; return; }
   const {user, repo} = getGHConfig();
-  const urls = [
+  const remoteUrls = [
     `https://raw.githubusercontent.com/${user}/${repo}/main/data/idle.json`,
     `https://${user}.github.io/${repo}/data/idle.json`,
-    `./data/idle.json`
   ];
+  const isLocalHost = ['localhost','127.0.0.1','0.0.0.0'].includes(location.hostname);
+  const urls = (location.protocol === 'file:' || isLocalHost)
+    ? [`./data/idle.json`, ...remoteUrls]
+    : [...remoteUrls, `./data/idle.json`];
   for(const url of urls){
     try{
       const idle = await fetchJson(url);
@@ -2273,19 +2349,20 @@ async function loadIdleData(){
 async function loadAJKData(){
   if(ajkLoaded) return;
   const localAJK = await loadLocalDataScript('ajk', '__LOCAL_AJK_DATA__');
-  if(localAJK && localAJK.length){ rawAJK = localAJK; ajkLoaded = true; return; }
+  if(localAJK && localAJK.length){ rawAJK = localAJK; ajkCache = null; ajkLoaded = true; return; }
   const {user, repo} = getGHConfig();
   const remoteUrls = [
     `https://raw.githubusercontent.com/${user}/${repo}/main/data/ajk.json`,
     `https://${user}.github.io/${repo}/data/ajk.json`,
   ];
+  const isLocalHost = ['localhost','127.0.0.1','0.0.0.0'].includes(location.hostname);
   const urls = location.protocol === 'file:'
     ? [`./data/ajk.json`, ...remoteUrls]
-    : [...remoteUrls, `./data/ajk.json`];
+    : (isLocalHost ? [`./data/ajk.json`, ...remoteUrls] : [...remoteUrls, `./data/ajk.json`]);
   for(const url of urls){
     try{
       const ajk = await fetchJson(url);
-      if(ajk && ajk.length){ rawAJK = ajk; ajkLoaded = true; return; }
+      if(ajk && ajk.length){ rawAJK = ajk; ajkCache = null; ajkLoaded = true; return; }
     }catch(_){}
   }
 }
@@ -2299,9 +2376,10 @@ async function loadW58Data(){
     `https://raw.githubusercontent.com/${user}/${repo}/main/data/w58.json`,
     `https://${user}.github.io/${repo}/data/w58.json`,
   ];
+  const isLocalHost = ['localhost','127.0.0.1','0.0.0.0'].includes(location.hostname);
   const urls = location.protocol === 'file:'
     ? [`./data/w58.json`, ...remoteUrls]
-    : [...remoteUrls, `./data/w58.json`];
+    : (isLocalHost ? [`./data/w58.json`, ...remoteUrls] : [...remoteUrls, `./data/w58.json`]);
   for(const url of urls){
     try{
       const w58 = await fetchJson(url);
@@ -2313,10 +2391,12 @@ async function loadW58Data(){
 async function loadData(){
   loadSettings();
   document.getElementById('updatedText').textContent = '加载中…';
-  await Promise.all([loadAJKData(), loadIdleData(), loadW58Data()]);
   const active = document.querySelector('.page.active')?.id?.replace('page-','') || 'ajk';
-  updateDateLabel(active);
-  await renderActiveTab(active).catch(()=>{});
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await renderActiveTab(active).catch(()=>updateDateLabel(active));
+  if(active === 'ajk' && rawAJK.length && !document.getElementById('ajkKpi')?.children.length){
+    setTimeout(()=>renderActiveTab('ajk').catch(()=>updateDateLabel('ajk')), 120);
+  }
   if(!rawAJK.length && !rawW58.length && !rawIdle.length){
     document.getElementById('updatedText').textContent = '加载失败';
   }
